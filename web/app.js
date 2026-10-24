@@ -129,7 +129,16 @@ function drawSpectrogram(sg) {
   const { ctx, w, h } = prepCanvas('spectrogram');
   const pad = 30;
   const { x0, x1, y0, y1 } = frame(ctx, w, h, pad);
-  const img = ctx.createImageData(Math.floor(x1 - x0), Math.floor(y1 - y0));
+  const plotW = Math.floor(x1 - x0), plotH = Math.floor(y1 - y0);
+  // Render the heatmap into an offscreen canvas at 1:1 pixel scale and
+  // stamp it with drawImage, which respects the devicePixelRatio
+  // transform (putImageData does not, so the image would come out too
+  // small on HiDPI screens).
+  const off = document.createElement('canvas');
+  off.width = plotW;
+  off.height = plotH;
+  const octx = off.getContext('2d');
+  const img = octx.createImageData(plotW, plotH);
   const t0 = sg.t1, dt = sg.dt, nt = sg.nt;
   const f0 = sg.f1, df = sg.df, nf = sg.nf;
   const cols = img.width, rows = img.height;
@@ -144,7 +153,8 @@ function drawSpectrogram(sg) {
       img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
     }
   }
-  ctx.putImageData(img, x0, y0);
+  octx.putImageData(img, 0, 0);
+  ctx.drawImage(off, x0, y0, plotW, plotH);
   // axes
   ctx.fillStyle = PALETTE.fg;
   ctx.font = '11px system-ui';

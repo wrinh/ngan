@@ -84,12 +84,24 @@ pub fn analyze_csv(samples_csv : String, fs : Double) -> String {
       sb <+ ", "
     }
     sb <+ "["
-    let frame = col * stride
+    // Average the linear power over the stride frames before converting
+    // to dB: plain subsampling aliases the glottal-pulse striations.
+    let f_start = col * stride
+    let f_end = if f_start + stride < nt {
+      f_start + stride
+    } else {
+      nt
+    }
+    let span = (f_end - f_start).to_double()
     for band in 0..<nf {
       if band > 0 {
         sb <+ ", "
       }
-      let p = sg.power[band * nt + frame]
+      let mut sum = 0.0
+      for fr in f_start..<f_end {
+        sum += sg.power[band * nt + fr]
+      }
+      let p = sum / span
       let db = if max_p > 0.0 && p > 0.0 {
         10.0 * @math.log10(p / max_p)
       } else {
