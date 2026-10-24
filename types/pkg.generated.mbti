@@ -48,6 +48,18 @@ pub(all) struct PitchTier {
   frames : Array[PitchFrame]
 }
 
+pub(all) struct Spectrogram {
+  t1 : Double
+  dt : Double
+  number_of_time_frames : Int
+  f1 : Double
+  df : Double
+  number_of_frequency_bands : Int
+  power : FixedArray[Double]
+}
+pub fn Spectrogram::max_power(Self) -> Double
+pub fn Spectrogram::power_at(Self, t~ : Double, f~ : Double) -> Double?
+
 // Type aliases
 
 // Traits

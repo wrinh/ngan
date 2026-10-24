@@ -9,6 +9,7 @@
 // - `intensity`       <-> `To Intensity...`
 // - `pitch`           <-> `To Pitch (ac)...`
 // - `formants`        <-> `To Formant (burg)...`
+// - `spectrogram`     <-> `To Spectrogram...`
 
 ///|
 pub using @types {
@@ -18,11 +19,12 @@ pub using @types {
   type IntensityTier,
   type PitchTier,
   type FormantTier,
+  type Spectrogram,
   type AcousticAnalysisResult,
 }
 
 ///|
-pub using @analysis {intensity, pitch, formants}
+pub using @analysis {intensity, pitch, formants, spectrogram}
 
 ///|
 /// Praat `To Intensity...` with defaults for everything except
@@ -61,6 +63,28 @@ pub fn analyze_formants(
     sample_rate~,
     max_num_formants=max_formants,
     max_formant_freq~,
+  )
+}
+
+///|
+/// Praat `To Spectrogram...` with defaults for everything except the
+/// grid steps (defaults: 0.005 s Gaussian window, 5000 Hz ceiling,
+/// 0.002 s time step, 20 Hz frequency step).
+pub fn analyze_spectrogram(
+  samples : FixedArray[Double],
+  sample_rate : Double,
+  window_length : Double,
+  maximum_frequency : Double,
+  time_step : Double,
+  frequency_step : Double,
+) -> @types.Spectrogram {
+  @analysis.spectrogram(
+    samples,
+    sample_rate~,
+    window_length~,
+    maximum_frequency~,
+    time_step~,
+    frequency_step~,
   )
 }
 

@@ -106,4 +106,22 @@ fn main {
       "formants: \{cnt} frames, mean F1 \{mean_f1} Hz, mean F2 \{mean_f2} Hz",
     )
   }
+  // Spectrogram: locate the strongest band of the middle frame.
+  let sg = @ngan.spectrogram(samples, sample_rate=FS)
+  let mid = sg.number_of_time_frames / 2
+  let mut best_band = 0
+  let mut best_power = -1.0
+  for band in 0..<sg.number_of_frequency_bands {
+    let p = sg.power[band * sg.number_of_time_frames + mid]
+    if p > best_power {
+      best_power = p
+      best_band = band
+    }
+  }
+  let peak_f = sg.f1 + best_band.to_double() * sg.df
+  let total_bands = sg.number_of_frequency_bands
+  let total_frames = sg.number_of_time_frames
+  println(
+    "spectrogram: \{total_frames} frames x \{total_bands} bands, peak band \{peak_f} Hz",
+  )
 }

@@ -12,12 +12,14 @@ numbers without shipping a 20 MB Emscripten build of the C++ original.
 | `@ngan.intensity` | `To Intensity...` | Kaiser-20 windowed mean power, dB SPL re 2e-5 Pa |
 | `@ngan.pitch` | `To Pitch (ac)...` | Boersma (1993) autocorrelation + Viterbi path finder |
 | `@ngan.formants` | `To Formant (burg)...` | Gaussian window + Burg LPC + polynomial roots |
+| `@ngan.spectrogram` | `To Spectrogram...` | Gaussian-windowed FFT power spectrogram (Pa^2/Hz) |
 
 Behavior is ported line-by-line from the Praat sources
 (`fon/Sound_to_Intensity.cpp`, `fon/Sound_to_Pitch.cpp`, `fon/Pitch.cpp`,
-`fon/Sound_to_Formant.cpp`, `dwsys/NUM2.cpp`): identical windows, identical
-normalizations, identical frame layouts and identical decision rules — see
-*Praat parity notes* below.
+`fon/Sound_to_Formant.cpp`, `fon/Sound_and_Spectrogram.cpp`,
+`dwsys/NUM2.cpp`): identical windows, identical normalizations, identical
+frame layouts and identical decision rules — see *Praat parity notes*
+below.
 
 ## Quick start
 
@@ -34,6 +36,7 @@ The demo prints (synthetic two-formant vowel, 219.2 Hz voicing, 16 kHz):
 intensity frames: 117, mid-frame 107.3 dB SPL
 pitch: 97/97 voiced frames, mean f0 219.17 Hz
 formants: 152 frames, mean F1 566 Hz, mean F2 1519 Hz
+spectrogram: 496 frames x 160 bands, peak band 406.25 Hz
 ```
 
 ## Usage
@@ -47,6 +50,8 @@ pub fn analyze_intensity(samples : FixedArray[Double], sample_rate : Double, min
 pub fn analyze_pitch(samples : FixedArray[Double], sample_rate : Double, pitch_floor : Double, pitch_ceiling : Double) -> PitchTier
 
 pub fn analyze_formants(samples : FixedArray[Double], sample_rate : Double, max_formants : Int, max_formant_freq : Double) -> FormantTier
+
+pub fn analyze_spectrogram(samples : FixedArray[Double], sample_rate : Double, window_length : Double, maximum_frequency : Double, time_step : Double, frequency_step : Double) -> Spectrogram
 
 pub fn analyze_all(...) -> AcousticAnalysisResult
 ```
@@ -178,6 +183,14 @@ Where the engine specification and the Praat sources disagree, ngan follows
   `floor((duration - window) / dt) + 1` frames fitted symmetrically, first
   frame at `mid - 0.5 * n * dt + 0.5 * dt`, edge windows clipped to the
   sound (pitch windows always fit fully inside).
+- **Spectrogram** (`To Spectrogram...`): Gaussian window spanning
+  `2 * window_length` with Praat's exact `(exp(-48 p^2) - exp(-12)) /
+  (1 - exp(-12))` shape, time/frequency steps raised to
+  `effective_width / 8` (the dialog's 8x oversampling), frequency steps
+  snapped to whole FFT bins, band power `sum |X_k|^2 / sum w^2 /
+  bin_width` in Pa^2/Hz, and the first band centred at
+  `0.5 * (df - fft_bin_width)` — all straight from
+  `Sound_to_Spectrogram_e`.
 - **Resampling**: Praat zeroes the spectrum above the target Nyquist and
   interpolates with a 50-tap sinc; ngan uses an equivalent Kaiser-12
   band-limited sinc (32 zero crossings), never linear interpolation.
@@ -199,6 +212,10 @@ answers:
 - Formants of a synthetic two-formant vowel (500 / 1500 Hz, 100 Hz
   bandwidths): recovered at both the native rate and through the internal
   16 kHz → 11 kHz band-limited resampling path.
+- Spectrogram of a 1 kHz sine: the grid (0.002 s x 31.25 Hz bins after
+  Praat's 8x-oversampling snap) peaks exactly in the 1000 Hz band and the
+  2000 Hz band is >50x weaker; the 5000 Hz ceiling clamps to Nyquist at
+  8 kHz sampling; two-partial signals peak in their own bands.
 
 Performance reference: five full analyses (intensity + pitch + formants) of
 5 s / 16 kHz audio take ~5.3 s under `moon test`'s *debug wasm interpreter*

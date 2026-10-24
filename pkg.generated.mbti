@@ -14,11 +14,15 @@ pub fn analyze_intensity(FixedArray[Double], Double, Double) -> @types.Intensity
 
 pub fn analyze_pitch(FixedArray[Double], Double, Double, Double) -> @types.PitchTier
 
+pub fn analyze_spectrogram(FixedArray[Double], Double, Double, Double, Double, Double) -> @types.Spectrogram
+
 pub fn formants(FixedArray[Double], sample_rate~ : Double, time_step? : Double, max_num_formants? : Int, max_formant_freq? : Double, window_length? : Double, pre_emphasis_from? : Double) -> @types.FormantTier
 
 pub fn intensity(FixedArray[Double], sample_rate~ : Double, min_pitch? : Double, time_step? : Double, subtract_mean? : Bool) -> @types.IntensityTier
 
 pub fn pitch(FixedArray[Double], sample_rate~ : Double, time_step? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_candidates? : Int, voicing_threshold? : Double, silence_threshold? : Double, octave_cost? : Double, octave_jump_cost? : Double, voiced_unvoiced_cost? : Double) -> @types.PitchTier
+
+pub fn spectrogram(FixedArray[Double], sample_rate~ : Double, window_length? : Double, maximum_frequency? : Double, time_step? : Double, frequency_step? : Double) -> @types.Spectrogram
 
 // Errors
 
@@ -38,5 +42,7 @@ pub using @types {type IntensityTier}
 pub using @types {type PitchFrame}
 
 pub using @types {type PitchTier}
+
+pub using @types {type Spectrogram}
 
 // Traits

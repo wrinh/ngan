@@ -80,3 +80,70 @@ pub fn IntensityTier::value_at(self : IntensityTier, t : Double) -> Double? {
   }
   Some(self.values[idx])
 }
+
+///|
+/// Time-frequency grid of power spectral density values in Pa^2/Hz,
+/// matching Praat's Spectrogram object: frames at `t1 + i * dt`,
+/// frequency bands centred at `f1 + j * df`. The `power` array is
+/// flattened band-major: index = band * number_of_time_frames + frame.
+pub(all) struct Spectrogram {
+  t1 : Double
+  dt : Double
+  number_of_time_frames : Int32
+  /// Centre frequency of the first band (Hz).
+  f1 : Double
+  df : Double
+  number_of_frequency_bands : Int32
+  /// Power spectral density per band and frame (Pa^2/Hz).
+  power : FixedArray[Double]
+}
+
+///|
+/// Praat's Spectrogram "Get power at (time, frequency)"
+/// (`Matrix_getValueAtXY`): bilinear interpolation in time and
+/// frequency, `None` outside the grid.
+pub fn Spectrogram::power_at(
+  self : Spectrogram,
+  t~ : Double,
+  f~ : Double,
+) -> Double? {
+  let ntime = self.number_of_time_frames
+  let nband = self.number_of_frequency_bands
+  if ntime < 1 || nband < 1 || self.dt <= 0.0 || self.df <= 0.0 {
+    return None
+  }
+  let rt = (t - self.t1) / self.dt
+  let rf = (f - self.f1) / self.df
+  if rt < 0.0 || rt > (ntime - 1).to_double() {
+    return None
+  }
+  if rf < 0.0 || rf > (nband - 1).to_double() {
+    return None
+  }
+  let f0i = rt.floor().to_int()
+  let b0i = rf.floor().to_int()
+  let fx = rt - f0i.to_double()
+  let fy = rf - b0i.to_double()
+  let f1i = if f0i + 1 <= ntime - 1 { f0i + 1 } else { f0i }
+  let b1i = if b0i + 1 <= nband - 1 { b0i + 1 } else { b0i }
+  let p00 = self.power[b0i * ntime + f0i]
+  let p10 = self.power[b1i * ntime + f0i]
+  let p01 = self.power[b0i * ntime + f1i]
+  let p11 = self.power[b1i * ntime + f1i]
+  let at_f0 = p00 * (1.0 - fy) + p10 * fy
+  let at_f1 = p01 * (1.0 - fy) + p11 * fy
+  Some(at_f0 * (1.0 - fx) + at_f1 * fx)
+}
+
+///|
+/// The maximum power density over the whole grid (Praat's paint routines
+/// reference their dynamic range to this).
+pub fn Spectrogram::max_power(self : Spectrogram) -> Double {
+  let mut best = 0.0
+  for i in 0..<self.power.length() {
+    if self.power[i] > best {
+      best = self.power[i]
+    }
+  }
+  best
+}
