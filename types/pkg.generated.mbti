@@ -1,0 +1,53 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "308K/ngan/types"
+
+// Values
+
+// Errors
+
+// Types and methods
+pub(all) struct AcousticAnalysisResult {
+  intensity_times : FixedArray[Double]
+  intensity_values : FixedArray[Double]
+  pitch_frames : Array[PitchFrame]
+  formant_frames : Array[FormantFrame]
+}
+
+pub(all) struct FormantFrame {
+  time : Double
+  formants : Array[FormantValue]
+}
+
+pub(all) struct FormantTier {
+  t1 : Double
+  dt : Double
+  frames : Array[FormantFrame]
+}
+
+pub(all) struct FormantValue {
+  frequency : Double
+  bandwidth : Double
+}
+
+pub(all) struct IntensityTier {
+  t1 : Double
+  dt : Double
+  values : FixedArray[Double]
+}
+pub fn IntensityTier::value_at(Self, Double) -> Double?
+
+pub(all) struct PitchFrame {
+  time : Double
+  frequency : Double?
+  strength : Double
+}
+
+pub(all) struct PitchTier {
+  t1 : Double
+  dt : Double
+  frames : Array[PitchFrame]
+}
+
+// Type aliases
+
+// Traits

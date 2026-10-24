@@ -1,0 +1,6 @@
+import {
+  "308K/ngan",
+  "308K/ngan/math",
+}
+
+pkgtype(kind: "executable")

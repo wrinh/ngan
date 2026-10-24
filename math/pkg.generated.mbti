@@ -1,0 +1,67 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "308K/ngan/math"
+
+// Values
+pub const LN10 : Double = 2.30258509299404568402
+
+pub const LN2 : Double = 0.69314718055994530942
+
+pub const PI : Double = 3.14159265358979323846
+
+pub fn abs(Double) -> Double
+
+pub fn atan(Double) -> Double
+
+pub fn atan2(Double, Double) -> Double
+
+pub fn bessel_i0(Double) -> Double
+
+pub fn ceil(Double) -> Double
+
+pub fn ceil_int(Double) -> Int
+
+pub fn clamp01(Double) -> Double
+
+pub fn cos(Double) -> Double
+
+pub fn dmax(Double, Double) -> Double
+
+pub fn dmin(Double, Double) -> Double
+
+pub fn exp(Double) -> Double
+
+pub fn floor(Double) -> Double
+
+pub fn floor_int(Double) -> Int
+
+pub fn ln(Double) -> Double
+
+pub fn log10(Double) -> Double
+
+pub fn log2(Double) -> Double
+
+pub fn poly_roots(FixedArray[Double]) -> Array[Complex]
+
+pub fn round_int(Double) -> Int
+
+pub fn sin(Double) -> Double
+
+// Errors
+
+// Types and methods
+pub(all) struct Complex {
+  re : Double
+  im : Double
+}
+pub fn Complex::abs(Self) -> Double
+pub fn Complex::add(Self, Self) -> Self
+pub fn Complex::arg(Self) -> Double
+pub fn Complex::conj(Self) -> Self
+pub fn Complex::div(Self, Self) -> Self
+pub fn Complex::from_polar(Double, Double) -> Self
+pub fn Complex::mul(Self, Self) -> Self
+pub fn Complex::sub(Self, Self) -> Self
+
+// Type aliases
+
+// Traits

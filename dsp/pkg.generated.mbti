@@ -1,0 +1,33 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "308K/ngan/dsp"
+
+// Values
+pub fn autocorrelation_fft(FftPlan, FixedArray[Double], Int, FixedArray[Double], max_lag~ : Int) -> Unit
+
+pub fn burg_lpc(FixedArray[Double], order~ : Int) -> FixedArray[Double]
+
+pub fn gaussian_window(Int) -> FixedArray[Double]
+
+pub fn hanning_window(Int) -> FixedArray[Double]
+
+pub fn kaiser_window(Int, beta~ : Double) -> FixedArray[Double]
+
+pub fn next_pow2(Int) -> Int
+
+pub fn sinc_resample(FixedArray[Double], ratio~ : Double, beta? : Double, zero_crossings? : Int) -> FixedArray[Double]
+
+// Errors
+
+// Types and methods
+pub struct FftPlan {
+  n : Int
+  rev : FixedArray[Int]
+  cos_t : FixedArray[Double]
+  sin_t : FixedArray[Double]
+}
+pub fn FftPlan::new(Int) -> Self
+pub fn FftPlan::transform(Self, FixedArray[Double], FixedArray[Double], inverse~ : Bool) -> Unit
+
+// Type aliases
+
+// Traits
