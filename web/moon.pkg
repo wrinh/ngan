@@ -1,0 +1,11 @@
+import {
+  "wrinh/ngan",
+  "wrinh/ngan/math",
+  "moonbitlang/core/string",
+}
+
+options(
+  link: {
+    "wasm-gc": { "exports": [ "analyze_csv" ], "use-js-builtin-string": true },
+  },
+)

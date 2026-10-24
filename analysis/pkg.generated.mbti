@@ -1,8 +1,8 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "308K/ngan/analysis"
+package "wrinh/ngan/analysis"
 
 import {
-  "308K/ngan/types",
+  "wrinh/ngan/types",
 }
 
 // Values

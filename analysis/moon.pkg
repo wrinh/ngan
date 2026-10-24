@@ -1,5 +1,5 @@
 import {
-  "308K/ngan/dsp",
-  "308K/ngan/math",
-  "308K/ngan/types",
+  "wrinh/ngan/dsp",
+  "wrinh/ngan/math",
+  "wrinh/ngan/types",
 }

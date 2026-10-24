@@ -2,7 +2,7 @@
 // Copyright (C) 2026 ngan contributors
 
 // Thin re-exports of the libm surface used across ngan plus small numeric
-// helpers, so every other package only needs to import `308K/ngan/math`.
+// helpers, so every other package only needs to import `wrinh/ngan/math`.
 
 ///|
 pub const PI : Double = 3.14159265358979323846

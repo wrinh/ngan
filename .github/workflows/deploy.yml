@@ -1,0 +1,38 @@
+name: Deploy demo
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - name: Test
+        run: moon test
+      - name: Build wasm-gc module
+        run: moon build --target wasm-gc --release
+      - name: Stage site
+        run: |
+          mkdir -p site
+          cp web/index.html web/app.js site/
+          cp _build/wasm-gc/release/build/web/web.wasm site/
+      - name: Ensure Pages project exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          npx wrangler pages project create ngan-demo --production-branch=main \
+            || echo "project already exists (or creation unavailable); continuing"
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: pages deploy site --project-name=ngan-demo --branch=main --commit-dirty=true

@@ -1,6 +1,6 @@
 import {
-  "308K/ngan",
-  "308K/ngan/math",
+  "wrinh/ngan",
+  "wrinh/ngan/math",
 }
 
 pkgtype(kind: "executable")

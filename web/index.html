@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ngan — Praat-grade speech analysis in your browser</title>
+<style>
+  :root {
+    --bg: #101418; --panel: #1a2028; --ink: #e8ecf1; --dim: #8a97a6;
+    --accent: #62d0ff; --accent2: #ffb454; --line: #2a333f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 system-ui, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 26px; margin: 8px 0 4px; }
+  h1 .ipa { color: var(--accent); }
+  .sub { color: var(--dim); margin: 0 0 20px; }
+  .sub a { color: var(--accent); text-decoration: none; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  button, label.btn {
+    background: var(--accent); color: #06222e; border: 0; border-radius: 8px;
+    padding: 9px 16px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  label.btn { display: inline-block; }
+  button.secondary, label.btn.secondary { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  #status { color: var(--dim); min-height: 22px; }
+  #summary { color: var(--ink); margin: 6px 0 14px; font-variant-numeric: tabular-nums; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 14px 0; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 8px; }
+  canvas { width: 100%; height: auto; display: block; border-radius: 6px; background: #0b0e12; }
+  footer { color: var(--dim); font-size: 13px; margin-top: 28px; }
+  footer a { color: var(--dim); }
+</style>
+</head>
+<body>
+<main>
+  <h1>ngan <span class="ipa">[ŋan]</span> · 言</h1>
+  <p class="sub">
+    Praat-compatible intensity, pitch, formant and spectrogram analysis,
+    running entirely in your browser as a
+    <a href="https://www.moonbitlang.com/">MoonBit</a> WebAssembly&nbsp;GC module (~90&nbsp;KB).
+    No audio leaves this page.
+  </p>
+
+  <div class="controls">
+    <button id="demo">Generate demo vowel</button>
+    <label class="btn secondary" for="file">Load audio file…</label>
+    <input id="file" type="file" accept="audio/*" hidden />
+  </div>
+  <div id="status">Loading wasm module…</div>
+  <div id="summary"></div>
+
+  <div class="panel"><h2>Spectrogram · 语谱图</h2><canvas id="spectrogram" width="940" height="300"></canvas></div>
+  <div class="panel"><h2>Pitch (F0) · 基频</h2><canvas id="pitch" width="940" height="170"></canvas></div>
+  <div class="panel"><h2>Formants · 共振峰</h2><canvas id="formants" width="940" height="170"></canvas></div>
+  <div class="panel"><h2>Intensity · 音强 (dB SPL)</h2><canvas id="intensity" width="940" height="130"></canvas></div>
+  <div class="panel"><h2>Waveform · 波形</h2><canvas id="waveform" width="940" height="110"></canvas></div>
+
+  <footer>
+    ngan is a GPL-3.0-or-later derivative work of
+    <a href="https://www.fon.hum.uva.nl/praat/">Praat</a> ·
+    <a href="https://github.com/wrinh/ngan">source on GitHub</a> ·
+    deployed on Cloudflare Pages
+  </footer>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

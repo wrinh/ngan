@@ -1,12 +1,12 @@
 import {
-  "308K/ngan/analysis",
-  "308K/ngan/types",
+  "wrinh/ngan/analysis",
+  "wrinh/ngan/types",
 }
 
 import {
-  "308K/ngan/math",
+  "wrinh/ngan/math",
 } for "test"
 
 import {
-  "308K/ngan/math",
+  "wrinh/ngan/math",
 } for "wbtest"

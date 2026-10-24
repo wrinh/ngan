@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "308K/ngan/dsp"
+package "wrinh/ngan/dsp"
 
 // Values
 pub fn autocorrelation_fft(FftPlan, FixedArray[Double], Int, FixedArray[Double], max_lag~ : Int) -> Unit

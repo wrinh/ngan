@@ -1,6 +1,6 @@
 # ngan
 
-**ngan** (너간 / 韵感) is a [Praat](https://www.fon.hum.uva.nl/praat/)-compatible
+**ngan [ŋan]** (「[言](https://xtext.kkn.moe/?q=%E8%A8%80&mode=default)」) is a [Praat](https://www.fon.hum.uva.nl/praat/)-compatible
 acoustic analysis engine written in pure [MoonBit](https://www.moonbitlang.com/),
 compiled to **WebAssembly GC**. It reimplements the three core Praat
 analysis commands from scratch — intensity, pitch, and formants — with no
@@ -20,6 +20,16 @@ Behavior is ported line-by-line from the Praat sources
 `dwsys/NUM2.cpp`): identical windows, identical normalizations, identical
 frame layouts and identical decision rules — see *Praat parity notes*
 below.
+
+## Online demo
+
+A small demo page (vanilla JS, no framework) loads the ~90 KB wasm-gc
+module, synthesizes a gliding two-formant vowel or analyzes a local audio
+file, and draws the spectrogram, pitch track, formants, intensity and
+waveform — all client-side, no uploads:
+
+**<https://ngan-demo.pages.dev>** (source: `web/`, deployed by
+`.github/workflows/deploy.yml` on every push to `main`).
 
 ## Quick start
 
@@ -235,9 +245,3 @@ affiliated with or endorsed by the Praat project; Praat is
 (c) Paul Boersma and David Weenink, see
 <https://www.fon.hum.uva.nl/praat/>.
 
-Practical notes:
-
-- Using the compiled Wasm-GC module as a service (e.g. from a web app)
-  does not trigger GPL obligations — network use is not conveyance.
-- Apache-2.0 dependencies such as `moonbitlang/core` are one-way
-  compatible with GPL-3, so the combination is fine.

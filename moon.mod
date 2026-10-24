@@ -1,10 +1,10 @@
-name = "308K/ngan"
+name = "wrinh/ngan"
 
 version = "0.1.0"
 
 readme = "README.mbt.md"
 
-repository = "https://github.com/308K/ngan"
+repository = "https://github.com/wrinh/ngan"
 
 license = "GPL-3.0-or-later"
 

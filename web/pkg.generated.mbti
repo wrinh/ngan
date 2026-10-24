@@ -1,0 +1,13 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "wrinh/ngan/web"
+
+// Values
+pub fn analyze_csv(String, Double) -> String
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
