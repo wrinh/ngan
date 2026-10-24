@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ngan contributors
+
 // Shared result data structures for the ngan acoustic analysis engine.
 //
 // Frame time convention: every analyzer tiles the sound with frames of

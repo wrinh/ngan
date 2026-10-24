@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ngan contributors
+
 // ngan — a Praat-compatible acoustic analysis engine in pure MoonBit,
 // compiled to WebAssembly GC.
 //

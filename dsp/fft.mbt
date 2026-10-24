@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ngan contributors
+
 // Iterative radix-2 FFT with precomputed bit-reversal and twiddle tables,
 // used for O(N log N) autocorrelation in the pitch tracker.
 

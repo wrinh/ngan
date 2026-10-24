@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ngan contributors
+
 // Whitebox tests for the analysis package: each analyzer is validated on
 // synthetic signals with known ground truth (full-scale sine -> exact dB
 // SPL, 220 Hz sine -> exact f0, AR(4) resonator -> exact formants).

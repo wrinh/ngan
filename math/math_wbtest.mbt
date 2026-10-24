@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ngan contributors
+
 // Whitebox tests for the math package (same package scope).
 
 ///|

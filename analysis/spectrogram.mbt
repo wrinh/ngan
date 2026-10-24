@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ngan contributors
+
 // Praat `To Spectrogram...`: Gaussian-windowed power spectrogram.
 // Ported from fon/Sound_and_Spectrogram.cpp (Sound_to_Spectrogram_e with
 // the Gaussian window shape and the 8x time/frequency oversampling that

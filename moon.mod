@@ -6,7 +6,7 @@ readme = "README.mbt.md"
 
 repository = "https://github.com/308K/ngan"
 
-license = "Apache-2.0"
+license = "GPL-3.0-or-later"
 
 keywords = [ "praat", "phonetics", "speech-analysis", "dsp", "wasm-gc" ]
 

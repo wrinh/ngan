@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ngan contributors
+
 // Demo: synthesize a one-second two-formant vowel (220 Hz voicing,
 // resonances at 500/1500 Hz, 100 Hz bandwidth) at 16 kHz and run the
 // full ngan analysis on it.

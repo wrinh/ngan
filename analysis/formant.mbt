@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ngan contributors
+
 // Praat `To Formant (burg)...`: Gaussian-windowed Burg LPC analysis.
 // Ported from fon/Sound_to_Formant.cpp.
 

@@ -225,5 +225,19 @@ specification's < 50 ms budget. All hot paths are O(N log N).
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE). ngan is an independent reimplementation
-and is not affiliated with the Praat project.
+**GPL-3.0-or-later** — see [LICENSE](LICENSE).
+
+ngan's analysis modules (`analysis/*.mbt` and the window formulas in
+`dsp/window.mbt`) are derived from Praat's GPL-licensed C++ sources, so
+ngan is a derivative work of Praat and inherits the GPL. Everything else
+is distributed under the same license for simplicity. ngan is not
+affiliated with or endorsed by the Praat project; Praat is
+(c) Paul Boersma and David Weenink, see
+<https://www.fon.hum.uva.nl/praat/>.
+
+Practical notes:
+
+- Using the compiled Wasm-GC module as a service (e.g. from a web app)
+  does not trigger GPL obligations — network use is not conveyance.
+- Apache-2.0 dependencies such as `moonbitlang/core` are one-way
+  compatible with GPL-3, so the combination is fine.

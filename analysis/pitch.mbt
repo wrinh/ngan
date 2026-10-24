@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ngan contributors
+
 // Praat `To Pitch (ac)...`: Boersma (1993) autocorrelation pitch tracker.
 // Ported from fon/Sound_to_Pitch.cpp (AC_HANNING method) and
 // fon/Pitch.cpp (path finder).

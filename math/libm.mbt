@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ngan contributors
+
 // Thin re-exports of the libm surface used across ngan plus small numeric
 // helpers, so every other package only needs to import `308K/ngan/math`.
 

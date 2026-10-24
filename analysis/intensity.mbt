@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 ngan contributors
+
 // Praat `To Intensity...`: frame-wise sound pressure level in dB SPL.
 // Ported from fon/Sound_to_Intensity.cpp.
 
