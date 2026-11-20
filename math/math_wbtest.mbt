@@ -92,3 +92,10 @@ test "poly_roots recovers damped complex pair" {
   }
   assert_true(approx(upper.arg(), th, 1.0e-9))
 }
+
+///|
+test "pow matches basic powers" {
+  assert_true(approx(pow(2.0, 3.0), 8.0, 1.0e-12))
+  assert_true(approx(pow(9.0, 0.5), 3.0, 1.0e-12))
+  assert_true(approx(pow(10.0, -2.0), 0.01, 1.0e-12))
+}

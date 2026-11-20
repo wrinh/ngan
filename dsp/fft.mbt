@@ -151,3 +151,53 @@ pub fn autocorrelation_fft(
     }
   }
 }
+
+///|
+/// Linear cross-correlation `cc[tau] = sum_{j=0}^{nu-1} u[j] * v[j + tau]`
+/// for `0 <= tau <= max_lag`, computed via `IFFT(conj(FFT(u)) * FFT(v))`.
+/// `plan.n` must be at least `next_pow2(max(nv, nu + max_lag))` to avoid
+/// circular wrap-around.
+pub fn cross_correlation_fft(
+  plan : FftPlan,
+  u : FixedArray[Double],
+  nu : Int32,
+  v : FixedArray[Double],
+  nv : Int32,
+  cc : FixedArray[Double],
+  max_lag~ : Int32,
+) -> Unit {
+  if max_lag < 0 || cc.length() == 0 {
+    return
+  }
+  let n = plan.n
+  let u_len = if nu < u.length() { nu } else { u.length() }
+  let v_len = if nv < v.length() { nv } else { v.length() }
+  let ure : FixedArray[Double] = FixedArray::make(n, 0.0)
+  let uim : FixedArray[Double] = FixedArray::make(n, 0.0)
+  let vre : FixedArray[Double] = FixedArray::make(n, 0.0)
+  let vim : FixedArray[Double] = FixedArray::make(n, 0.0)
+  let nu_clamped = if u_len < n { u_len } else { n }
+  let nv_clamped = if v_len < n { v_len } else { n }
+  for i in 0..<nu_clamped {
+    ure[i] = u[i]
+  }
+  for i in 0..<nv_clamped {
+    vre[i] = v[i]
+  }
+  plan.transform(ure, uim, inverse=false)
+  plan.transform(vre, vim, inverse=false)
+  for k in 0..<n {
+    let r = ure[k] * vre[k] + uim[k] * vim[k]
+    let im = ure[k] * vim[k] - uim[k] * vre[k]
+    ure[k] = r
+    uim[k] = im
+  }
+  plan.transform(ure, uim, inverse=true)
+  let mut top = if max_lag < n - 1 { max_lag } else { n - 1 }
+  if top > cc.length() - 1 {
+    top = cc.length() - 1
+  }
+  for tau in 0..<=top {
+    cc[tau] = ure[tau]
+  }
+}

@@ -127,4 +127,82 @@ fn main {
   println(
     "spectrogram: \{total_frames} frames x \{total_bands} bands, peak band \{peak_f} Hz",
   )
+  // Cross-correlation pitch + psychoacoustic scales.
+  let pt_cc = @ngan.pitch_cc(samples, sample_rate=FS)
+  let mut cc_voiced = 0
+  let mut cc_sum = 0.0
+  for f in pt_cc.frames {
+    if f.frequency is Some(freq) {
+      cc_voiced += 1
+      cc_sum += freq
+    }
+  }
+  let mean_f0_cc = if cc_voiced > 0 {
+    cc_sum / cc_voiced.to_double()
+  } else {
+    0.0
+  }
+  let mean_st = @ngan.hz_to_semitones(mean_f0_cc)
+  let mean_erb = @ngan.hz_to_erb(mean_f0_cc)
+  let mean_mel = @ngan.hz_to_mel(mean_f0_cc)
+  let cc_total = pt_cc.frames.length()
+  println(
+    "pitch (cc): \{cc_voiced}/\{cc_total} voiced, mean f0 \{mean_f0_cc} Hz (\{mean_st} st, \{mean_erb} ERB, \{mean_mel} Mel)",
+  )
+  // Harmonicity (HNR) + glottal pulse perturbation (jitter / shimmer).
+  let hnr_ac = @ngan.harmonicity_ac(samples, sample_rate=FS)
+  let hnr_cc = @ngan.harmonicity_cc(samples, sample_rate=FS)
+  let mean_hnr_ac = hnr_ac.mean().unwrap_or(-200.0)
+  let mean_hnr_cc = hnr_cc.mean().unwrap_or(-200.0)
+  println("harmonicity: HNR(ac) \{mean_hnr_ac} dB, HNR(cc) \{mean_hnr_cc} dB")
+  let pp = @ngan.sound_and_pitch_to_point_process_cc(
+    samples,
+    sample_rate=FS,
+    pitch=pt_cc,
+  )
+  let j = @ngan.jitter(pp)
+  let s = @ngan.shimmer(samples, sample_rate=FS, pp~)
+  let pp_n = pp.length()
+  let j_pct = j.local_rel.unwrap_or(0.0) * 100.0
+  let s_pct = s.local_rel.unwrap_or(0.0) * 100.0
+  let s_db = s.local_db.unwrap_or(0.0)
+  println(
+    "voice quality: \{pp_n} pulses, jitter(local) \{j_pct}%, shimmer(local) \{s_pct}% (\{s_db} dB)",
+  )
+  // Viterbi formant tracking.
+  let raw_ft : @ngan.FormantTier = @ngan.formants(samples, sample_rate=FS)
+  let tracked_ft = @ngan.track_formants(raw_ft, num_tracks=2)
+  let mut tf1 = 0.0
+  let mut tf2 = 0.0
+  let mut tcnt = 0
+  for fr in tracked_ft.frames {
+    if fr.formants.length() >= 2 {
+      tf1 += fr.formants[0].frequency
+      tf2 += fr.formants[1].frequency
+      tcnt += 1
+    }
+  }
+  if tcnt > 0 {
+    let m1 = tf1 / tcnt.to_double()
+    let m2 = tf2 / tcnt.to_double()
+    println(
+      "tracked formants: \{tcnt} frames, mean F1 \{m1} Hz, mean F2 \{m2} Hz",
+    )
+  }
+  // LTAS, Center of Gravity, and Spectral Tilt (H1-H2).
+  let lt = @ngan.ltas(samples, sample_rate=FS)
+  let lt_slope = lt.slope().unwrap_or(0.0)
+  let cog = @ngan.center_of_gravity(samples, sample_rate=FS).unwrap_or(0.0)
+  let tilt = @ngan.spectral_tilt(
+    samples,
+    sample_rate=FS,
+    pitch=pt_cc,
+    formants=Some(tracked_ft),
+  )
+  let mid_tilt = tilt.frames[tilt.frames.length() / 2]
+  let h1_h2 = mid_tilt.h1_minus_h2.unwrap_or(0.0)
+  let h1_h2_c = mid_tilt.h1_minus_h2_corrected.unwrap_or(0.0)
+  println(
+    "spectral: CoG \{cog} Hz, LTAS slope \{lt_slope} dB, mid H1-H2 \{h1_h2} dB (H1*-H2* \{h1_h2_c} dB)",
+  )
 }

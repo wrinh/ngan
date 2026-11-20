@@ -1,1 +1,8 @@
-// Shared result types for ngan. No dependencies.
+// Shared result types for ngan.
+import {
+  "wrinh/ngan/math",
+}
+
+import {
+  "wrinh/ngan/math",
+} for "test"

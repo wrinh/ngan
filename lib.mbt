@@ -9,10 +9,18 @@
 // ABI from the engine specification plus a combined `analyze_all`.
 //
 // Map to Praat commands:
-// - `intensity`       <-> `To Intensity...`
-// - `pitch`           <-> `To Pitch (ac)...`
-// - `formants`        <-> `To Formant (burg)...`
-// - `spectrogram`     <-> `To Spectrogram...`
+// - `intensity`          <-> `To Intensity...`
+// - `pitch`              <-> `To Pitch (ac)...`
+// - `pitch_cc`           <-> `To Pitch (cc)...`
+// - `harmonicity_ac`     <-> `To Harmonicity (ac)...`
+// - `harmonicity_cc`     <-> `To Harmonicity (cc)...`
+// - `point_process_cc`   <-> `To PointProcess (periodic, cc)...`
+// - `jitter` / `shimmer` <-> `Get jitter (...)` / `Get shimmer (...)`
+// - `formants`           <-> `To Formant (burg)...`
+// - `track_formants`     <-> `Formant: Track...`
+// - `spectrogram`        <-> `To Spectrogram...`
+// - `ltas`               <-> `To Ltas...`
+// - `center_of_gravity`  <-> `Spectrum: Get centre of gravity...`
 
 ///|
 pub using @types {
@@ -24,10 +32,43 @@ pub using @types {
   type FormantTier,
   type Spectrogram,
   type AcousticAnalysisResult,
+  type HarmonicityTier,
+  type PointProcess,
+  type JitterMetrics,
+  type ShimmerMetrics,
+  type Ltas,
+  type SpectralFeatureTier,
+  type SpectralTiltFrame,
+  type SpectralTiltTier,
+  hz_to_semitones,
+  semitones_to_hz,
+  hz_to_erb,
+  erb_to_hz,
+  hz_to_mel,
+  mel_to_hz,
 }
 
 ///|
-pub using @analysis {intensity, pitch, formants, spectrogram}
+pub using @analysis {
+  intensity,
+  pitch,
+  pitch_cc,
+  harmonicity_ac,
+  harmonicity_cc,
+  point_process_cc,
+  sound_and_pitch_to_point_process_cc,
+  jitter,
+  shimmer,
+  formants,
+  track_formants,
+  spectrogram,
+  ltas,
+  spectrogram_to_ltas,
+  center_of_gravity,
+  spectrogram_center_of_gravity,
+  spectrogram_spectral_slope,
+  spectral_tilt,
+}
 
 ///|
 /// Praat `To Intensity...` with defaults for everything except
@@ -89,6 +130,50 @@ pub fn analyze_spectrogram(
     time_step~,
     frequency_step~,
   )
+}
+
+///|
+/// Praat `To Pitch (cc)...` with defaults for everything except the
+/// pitch range (defaults 75 / 600 Hz).
+pub fn analyze_pitch_cc(
+  samples : FixedArray[Double],
+  sample_rate : Double,
+  pitch_floor : Double,
+  pitch_ceiling : Double,
+) -> @types.PitchTier {
+  @analysis.pitch_cc(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
+}
+
+///|
+/// Praat `To Harmonicity (ac)...` with defaults for everything except
+/// `min_pitch` (default 75 Hz).
+pub fn analyze_harmonicity_ac(
+  samples : FixedArray[Double],
+  sample_rate : Double,
+  min_pitch : Double,
+) -> @types.HarmonicityTier {
+  @analysis.harmonicity_ac(samples, sample_rate~, min_pitch~)
+}
+
+///|
+/// Praat `To Harmonicity (cc)...` with defaults for everything except
+/// `min_pitch` (default 75 Hz).
+pub fn analyze_harmonicity_cc(
+  samples : FixedArray[Double],
+  sample_rate : Double,
+  min_pitch : Double,
+) -> @types.HarmonicityTier {
+  @analysis.harmonicity_cc(samples, sample_rate~, min_pitch~)
+}
+
+///|
+/// Praat `To Ltas...` with uniform bin width `bandwidth` (Hz).
+pub fn analyze_ltas(
+  samples : FixedArray[Double],
+  sample_rate : Double,
+  bandwidth : Double,
+) -> @types.Ltas {
+  @analysis.ltas(samples, sample_rate~, bandwidth~)
 }
 
 ///|

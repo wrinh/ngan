@@ -66,6 +66,33 @@ test "fft autocorrelation matches direct computation" {
 }
 
 ///|
+test "fft cross_correlation matches direct computation" {
+  let nu = 40
+  let nv = 100
+  let max_lag = 50
+  let u : FixedArray[Double] = FixedArray::make(nu, 0.0)
+  let v : FixedArray[Double] = FixedArray::make(nv, 0.0)
+  for i in 0..<nu {
+    u[i] = prand(i)
+  }
+  for i in 0..<nv {
+    v[i] = prand(i + 200)
+  }
+  let plan = FftPlan::new(next_pow2(nv + max_lag))
+  let cc : FixedArray[Double] = FixedArray::make(max_lag + 1, 0.0)
+  cross_correlation_fft(plan, u, nu, v, nv, cc, max_lag~)
+  for tau in 0..<=max_lag {
+    let mut direct = 0.0
+    for j in 0..<nu {
+      if j + tau < nv {
+        direct += u[j] * v[j + tau]
+      }
+    }
+    assert_true(approx(cc[tau], direct, 1.0e-10))
+  }
+}
+
+///|
 test "hanning window shape" {
   // Praat's periodic Hann: 0.5 - 0.5 cos(2 pi (i + 1) / (n + 1)).
   let w = hanning_window(5)

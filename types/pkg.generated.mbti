@@ -2,6 +2,17 @@
 package "wrinh/ngan/types"
 
 // Values
+pub fn erb_to_hz(Double) -> Double
+
+pub fn hz_to_erb(Double) -> Double
+
+pub fn hz_to_mel(Double) -> Double
+
+pub fn hz_to_semitones(Double, reference_hz? : Double) -> Double
+
+pub fn mel_to_hz(Double) -> Double
+
+pub fn semitones_to_hz(Double, reference_hz? : Double) -> Double
 
 // Errors
 
@@ -29,12 +40,37 @@ pub(all) struct FormantValue {
   bandwidth : Double
 }
 
+pub(all) struct HarmonicityTier {
+  t1 : Double
+  dt : Double
+  values : Array[Double?]
+}
+pub fn HarmonicityTier::mean(Self, tmin? : Double, tmax? : Double) -> Double?
+pub fn HarmonicityTier::value_at(Self, Double) -> Double?
+
 pub(all) struct IntensityTier {
   t1 : Double
   dt : Double
   values : FixedArray[Double]
 }
 pub fn IntensityTier::value_at(Self, Double) -> Double?
+
+pub(all) struct JitterMetrics {
+  local_rel : Double?
+  local_abs : Double?
+  rap : Double?
+  ppq5 : Double?
+  ddp : Double?
+}
+
+pub(all) struct Ltas {
+  f1 : Double
+  df : Double
+  values : FixedArray[Double]
+}
+pub fn Ltas::mean(Self, fmin? : Double, fmax? : Double, energy? : Bool) -> Double?
+pub fn Ltas::slope(Self, fmin_low? : Double, fmax_low? : Double, fmin_high? : Double, fmax_high? : Double, energy? : Bool) -> Double?
+pub fn Ltas::value_at(Self, Double) -> Double?
 
 pub(all) struct PitchFrame {
   time : Double
@@ -47,14 +83,61 @@ pub(all) struct PitchTier {
   dt : Double
   frames : Array[PitchFrame]
 }
+pub fn PitchTier::to_erb(Self) -> Array[Double?]
+pub fn PitchTier::to_mel(Self) -> Array[Double?]
+pub fn PitchTier::to_semitones(Self, reference_hz? : Double) -> Array[Double?]
+pub fn PitchTier::value_at(Self, Double) -> Double?
+
+pub(all) struct PointProcess {
+  tmin : Double
+  tmax : Double
+  points : FixedArray[Double]
+}
+pub fn PointProcess::length(Self) -> Int32
+pub fn PointProcess::mean_period(Self, tmin? : Double, tmax? : Double, shortest_period? : Double, longest_period? : Double, max_period_factor? : Double) -> Double?
+
+pub(all) struct ShimmerMetrics {
+  local_rel : Double?
+  local_db : Double?
+  apq3 : Double?
+  apq5 : Double?
+  apq11 : Double?
+  dda : Double?
+}
+
+pub(all) struct SpectralFeatureTier {
+  t1 : Double
+  dt : Double
+  values : FixedArray[Double]
+}
+pub fn SpectralFeatureTier::value_at(Self, Double) -> Double?
+
+pub(all) struct SpectralTiltFrame {
+  time : Double
+  f0 : Double?
+  h1 : Double?
+  h2 : Double?
+  h1_minus_h2 : Double?
+  h1_minus_h2_corrected : Double?
+  h1_minus_a1 : Double?
+  h1_minus_a2 : Double?
+  h1_minus_a3 : Double?
+  spectral_slope : Double?
+}
+
+pub(all) struct SpectralTiltTier {
+  t1 : Double
+  dt : Double
+  frames : Array[SpectralTiltFrame]
+}
 
 pub(all) struct Spectrogram {
   t1 : Double
   dt : Double
-  number_of_time_frames : Int
+  number_of_time_frames : Int32
   f1 : Double
   df : Double
-  number_of_frequency_bands : Int
+  number_of_frequency_bands : Int32
   power : FixedArray[Double]
 }
 pub fn Spectrogram::max_power(Self) -> Double

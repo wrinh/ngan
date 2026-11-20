@@ -44,6 +44,11 @@ pub fn log10(x : Double) -> Double {
 }
 
 ///|
+pub fn pow(x : Double, y : Double) -> Double {
+  @m.pow(x, y)
+}
+
+///|
 pub fn atan(x : Double) -> Double {
   @m.atan(x)
 }
