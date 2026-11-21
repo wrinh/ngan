@@ -2,7 +2,45 @@
 package "wrinh/ngan/web"
 
 // Values
+pub fn alloc_samples(Int32) -> Int32
+
 pub fn analyze_csv(String, Double) -> String
+
+pub fn analyze_formants_json(Double, Double, Int32, Double, Double, Double, Int32, Int32, Double, Double, Double, Double, Double) -> String
+
+pub fn analyze_harmonicity_json(Double, Double, Double, Double, Double, Int32) -> String
+
+pub fn analyze_intensity_json(Double, Double, Double, Int32) -> String
+
+pub fn analyze_pitch_json(Double, Double, Double, Double, Int32, Double, Double, Double, Double, Double, Int32) -> String
+
+pub fn analyze_spectral_json(Double, Double, Double, Double, Double) -> String
+
+pub fn analyze_spectrogram_json(Double, Double, Double, Double, Double, Int32) -> String
+
+pub fn analyze_textgrid_json(Double, String, String, Double, Double, Double, Int32, Double, Int32) -> String
+
+pub fn analyze_voice_report_json(Double, Double, Double, Double, Double) -> String
+
+pub fn get_sample(Int32) -> Double
+
+pub fn ring_analyze_frame_json(Double, Int32, Double, Double, Double, Int32, Double) -> String
+
+pub fn ring_capacity() -> Int32
+
+pub fn ring_copy_recent(Int32) -> Int32
+
+pub fn ring_len() -> Int32
+
+pub fn ring_push(Double) -> Unit
+
+pub fn ring_reset(Int32) -> Int32
+
+pub fn ring_total_samples() -> Int32
+
+pub fn samples_len() -> Int32
+
+pub fn set_sample(Int32, Double) -> Unit
 
 // Errors
 

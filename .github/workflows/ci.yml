@@ -22,3 +22,11 @@ jobs:
         run: moon build --target wasm-gc --release
       - name: Run demo
         run: moon run cmd/main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build & test npm SDK
+        run: |
+          npm --prefix npm install
+          npm --prefix npm run build
+          npm --prefix npm test

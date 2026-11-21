@@ -1,0 +1,58 @@
+{
+  "name": "@wrinh/ngan",
+  "version": "0.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Praat-compatible acoustic analysis engine (intensity, pitch, formants, spectrogram, HNR, jitter/shimmer, TextGrid) compiled from MoonBit to WebAssembly GC, with Web Audio API & AudioWorklet real-time streaming support.",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wrinh/ngan.git",
+    "directory": "npm"
+  },
+  "keywords": [
+    "praat",
+    "phonetics",
+    "speech-analysis",
+    "acoustics",
+    "pitch",
+    "formants",
+    "spectrogram",
+    "web-audio",
+    "audioworklet",
+    "wasm-gc"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./worklet": {
+      "types": "./dist/worklet-processor.d.ts",
+      "default": "./dist/worklet-processor.js"
+    },
+    "./ngan.wasm": "./dist/ngan.wasm"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build:wasm": "node ./scripts/copy-wasm.mjs --build",
+    "build:ts": "tsc -p tsconfig.json",
+    "build": "npm run build:wasm && npm run build:ts",
+    "test": "node --test ./test/sdk.test.mjs",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

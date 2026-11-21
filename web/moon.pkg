@@ -6,6 +6,30 @@ import {
 
 options(
   link: {
-    "wasm-gc": { "exports": [ "analyze_csv" ], "use-js-builtin-string": true },
+    "wasm-gc": {
+      "exports": [
+        "analyze_csv",
+        "alloc_samples",
+        "set_sample",
+        "get_sample",
+        "samples_len",
+        "ring_reset",
+        "ring_push",
+        "ring_len",
+        "ring_capacity",
+        "ring_total_samples",
+        "ring_copy_recent",
+        "analyze_intensity_json",
+        "analyze_pitch_json",
+        "analyze_formants_json",
+        "analyze_harmonicity_json",
+        "analyze_spectrogram_json",
+        "analyze_voice_report_json",
+        "analyze_spectral_json",
+        "analyze_textgrid_json",
+        "ring_analyze_frame_json",
+      ],
+      "use-js-builtin-string": true,
+    },
   },
 )

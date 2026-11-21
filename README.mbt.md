@@ -182,6 +182,36 @@ pub(all) struct IntensityTier {
 
 Wasm-GC struct references cross the JS boundary without JSON copies: hand the engine a `FixedArray[Double]` of PCM samples and read back the typed results.
 
+## JavaScript / TypeScript SDK (`@wrinh/ngan` in `npm/`)
+
+An npm-ready TypeScript wrapper lives in [`npm/`](npm/README.md) (`@wrinh/ngan`) with zero runtime dependencies, full `.d.ts` types, a Web Audio API decoding/resampling bridge (`decodeAudio`), and real-time microphone streaming powered by an `AudioWorklet` + WASM-side O(1) ring buffer (`startMicrophoneStream` / `createStreamSession`):
+
+```ts
+import { createNgan, decodeAudio } from '@wrinh/ngan';
+
+const ngan = await createNgan();
+
+// 1. Offline file via Web Audio API decoding + resampling bridge
+const { samples, sampleRate } = await decodeAudio(audioFile, { targetSampleRate: 16000 });
+const result = ngan.analyzeAll(samples, sampleRate, { spectrogram: true });
+
+// 2. Real-time microphone streaming via AudioWorklet + WASM ring buffer
+const mic = await ngan.startMicrophoneStream({
+  sampleRate: 16000,
+  onFrame(frame) {
+    console.log(frame.time, frame.pitch.frequency, frame.formants, frame.intensityDb);
+  },
+});
+```
+
+Build and test the npm SDK locally (requires Node.js 22+):
+
+```bash
+npm --prefix npm install
+npm --prefix npm run build
+npm --prefix npm test
+```
+
 ## Package layout
 
 ```
@@ -193,6 +223,8 @@ ngan
 ├── dsp/                  # radix-2 FFT, cross-correlation, Kaiser/Hann/Gaussian windows, sinc resampler, Burg LPC
 ├── analysis/             # intensity, pitch (ac/cc), harmonicity, point_process, jitter/shimmer, formants & tracking, spectrogram, ltas, spectral_features, segment_summary
 ├── textgrid/             # Praat .TextGrid parser & serializer (Long, Short, Chronological)
+├── web/                  # WASM-GC FFI boundary (web.mbt) & online demo
+├── npm/                  # TypeScript npm SDK, Web Audio bridge & AudioWorklet streaming
 └── cmd/main              # demo executable
 ```
 

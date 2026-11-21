@@ -4,3 +4,6 @@ target/
 .mooncakes/
 .repos/
 .moonagent/
+npm/node_modules/
+npm/dist/
+npm/*.tgz
