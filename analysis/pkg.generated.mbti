@@ -6,6 +6,8 @@ import {
 }
 
 // Values
+pub fn analyze_segments(FixedArray[Double], sample_rate~ : Double, @types.TextGrid, tier_name? : String, trajectory_points? : ArrayView[Double], skip_empty? : Bool, energy_intensity? : Bool, min_pitch? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_num_formants? : Int32, max_formant_freq? : Double, use_formant_tracking? : Bool) -> Array[@types.SegmentSummary]
+
 pub fn center_of_gravity(FixedArray[Double], sample_rate~ : Double, power? : Double, fmin? : Double, fmax? : Double) -> Double?
 
 pub fn formants(FixedArray[Double], sample_rate~ : Double, time_step? : Double, max_num_formants? : Int32, max_formant_freq? : Double, window_length? : Double, pre_emphasis_from? : Double) -> @types.FormantTier
@@ -39,6 +41,10 @@ pub fn spectrogram_center_of_gravity(@types.Spectrogram, power? : Double, fmin? 
 pub fn spectrogram_spectral_slope(@types.Spectrogram, fmin? : Double, fmax? : Double) -> @types.SpectralFeatureTier
 
 pub fn spectrogram_to_ltas(@types.Spectrogram, bandwidth? : Double) -> @types.Ltas
+
+pub fn summarize_interval_tier(@types.IntervalTier, pitch~ : @types.PitchTier, formants~ : @types.FormantTier, intensity~ : @types.IntensityTier, trajectory_points? : ArrayView[Double], skip_empty? : Bool, energy_intensity? : Bool) -> Array[@types.SegmentSummary]
+
+pub fn summarize_textgrid(@types.TextGrid, pitch~ : @types.PitchTier, formants~ : @types.FormantTier, intensity~ : @types.IntensityTier, tier_name? : String, trajectory_points? : ArrayView[Double], skip_empty? : Bool, energy_intensity? : Bool) -> Array[@types.SegmentSummary]
 
 pub fn track_formants(@types.FormantTier, num_tracks? : Int32, ref_f1? : Double, ref_f2? : Double, ref_f3? : Double, ref_f4? : Double, ref_f5? : Double, frequency_cost? : Double, bandwidth_cost? : Double, transition_cost? : Double) -> @types.FormantTier
 

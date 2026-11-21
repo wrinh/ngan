@@ -1,6 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "wrinh/ngan/types"
 
+import {
+  "moonbitlang/core/debug",
+}
+
 // Values
 pub fn erb_to_hz(Double) -> Double
 
@@ -15,6 +19,10 @@ pub fn mel_to_hz(Double) -> Double
 pub fn semitones_to_hz(Double, reference_hz? : Double) -> Double
 
 // Errors
+#derive(Eq, @debug.Debug)
+pub(all) suberror TextGridError {
+  InvalidFormat(line~ : Int32, message~ : String)
+}
 
 // Types and methods
 pub(all) struct AcousticAnalysisResult {
@@ -34,6 +42,9 @@ pub(all) struct FormantTier {
   dt : Double
   frames : Array[FormantFrame]
 }
+pub fn FormantTier::bandwidth_at(Self, Int32, Double) -> Double?
+pub fn FormantTier::mean(Self, Int32, tmin? : Double, tmax? : Double) -> Double?
+pub fn FormantTier::value_at(Self, Int32, Double) -> Double?
 
 pub(all) struct FormantValue {
   frequency : Double
@@ -53,7 +64,18 @@ pub(all) struct IntensityTier {
   dt : Double
   values : FixedArray[Double]
 }
+pub fn IntensityTier::mean(Self, tmin? : Double, tmax? : Double, energy? : Bool) -> Double?
 pub fn IntensityTier::value_at(Self, Double) -> Double?
+pub fn IntensityTier::value_at_linear(Self, Double) -> Double?
+
+#derive(Eq, @debug.Debug)
+pub(all) struct IntervalTier {
+  name : String
+  xmin : Double
+  xmax : Double
+  intervals : Array[TextInterval]
+}
+pub fn IntervalTier::interval_at(Self, Double) -> TextInterval?
 
 pub(all) struct JitterMetrics {
   local_rel : Double?
@@ -83,6 +105,7 @@ pub(all) struct PitchTier {
   dt : Double
   frames : Array[PitchFrame]
 }
+pub fn PitchTier::mean(Self, tmin? : Double, tmax? : Double) -> Double?
 pub fn PitchTier::to_erb(Self) -> Array[Double?]
 pub fn PitchTier::to_mel(Self) -> Array[Double?]
 pub fn PitchTier::to_semitones(Self, reference_hz? : Double) -> Array[Double?]
@@ -95,6 +118,46 @@ pub(all) struct PointProcess {
 }
 pub fn PointProcess::length(Self) -> Int32
 pub fn PointProcess::mean_period(Self, tmin? : Double, tmax? : Double, shortest_period? : Double, longest_period? : Double, max_period_factor? : Double) -> Double?
+
+#derive(Eq, @debug.Debug)
+pub(all) struct PointTier {
+  name : String
+  xmin : Double
+  xmax : Double
+  points : Array[TextPoint]
+}
+
+#derive(Eq, @debug.Debug)
+pub(all) struct SegmentSummary {
+  tier_name : String
+  index : Int32
+  label : String
+  xmin : Double
+  xmax : Double
+  duration : Double
+  f0_mean : Double?
+  f0_min : Double?
+  f0_max : Double?
+  f0_sd : Double?
+  voiced_fraction : Double
+  f1_mean : Double?
+  f2_mean : Double?
+  f3_mean : Double?
+  intensity_mean : Double?
+  intensity_max : Double?
+  trajectory : Array[SegmentTrajectoryPoint]
+}
+
+#derive(Eq, @debug.Debug)
+pub(all) struct SegmentTrajectoryPoint {
+  proportion : Double
+  time : Double
+  f0 : Double?
+  f1 : Double?
+  f2 : Double?
+  f3 : Double?
+  intensity : Double?
+}
 
 pub(all) struct ShimmerMetrics {
   local_rel : Double?
@@ -142,6 +205,41 @@ pub(all) struct Spectrogram {
 }
 pub fn Spectrogram::max_power(Self) -> Double
 pub fn Spectrogram::power_at(Self, t~ : Double, f~ : Double) -> Double?
+
+#derive(Eq, @debug.Debug)
+pub(all) struct TextGrid {
+  xmin : Double
+  xmax : Double
+  tiers : Array[TextGridTier]
+}
+pub fn TextGrid::interval_tier(Self, String) -> IntervalTier?
+pub fn TextGrid::interval_tiers(Self) -> Array[IntervalTier]
+pub fn TextGrid::point_tier(Self, String) -> PointTier?
+pub fn TextGrid::tier_by_name(Self, String) -> TextGridTier?
+
+#derive(Eq, @debug.Debug)
+pub(all) enum TextGridTier {
+  Intervals(IntervalTier)
+  Points(PointTier)
+}
+pub fn TextGridTier::name(Self) -> String
+pub fn TextGridTier::xmax(Self) -> Double
+pub fn TextGridTier::xmin(Self) -> Double
+
+#derive(Eq, @debug.Debug)
+pub(all) struct TextInterval {
+  xmin : Double
+  xmax : Double
+  text : String
+}
+pub fn TextInterval::duration(Self) -> Double
+pub fn TextInterval::midpoint(Self) -> Double
+
+#derive(Eq, @debug.Debug)
+pub(all) struct TextPoint {
+  time : Double
+  mark : String
+}
 
 // Type aliases
 

@@ -205,4 +205,46 @@ fn main {
   println(
     "spectral: CoG \{cog} Hz, LTAS slope \{lt_slope} dB, mid H1-H2 \{h1_h2} dB (H1*-H2* \{h1_h2_c} dB)",
   )
+  // TextGrid segment summarization with 20%-50%-80% trajectory points.
+  let tg_src =
+    #|File type = "ooTextFile"
+    #|Object class = "TextGrid"
+    #|xmin = 0
+    #|xmax = 1.0
+    #|tiers? <exists>
+    #|size = 1
+    #|item []:
+    #|    item [1]:
+    #|        class = "IntervalTier"
+    #|        name = "vowels"
+    #|        xmin = 0
+    #|        xmax = 1.0
+    #|        intervals: size = 1
+    #|        intervals [1]:
+    #|            xmin = 0.1
+    #|            xmax = 0.9
+    #|            text = "ə"
+  let tg = @ngan.parse_textgrid(tg_src) catch {
+    err => abort("TextGrid parse failed: \{Repr(err)}")
+  }
+  let it_seg = @ngan.intensity(samples, sample_rate=FS)
+  let segs = @ngan.summarize_textgrid(
+    tg,
+    pitch=pt_cc,
+    formants=tracked_ft,
+    intensity=it_seg,
+  )
+  if segs.length() > 0 {
+    let s0 = segs[0]
+    let f0m = s0.f0_mean.unwrap_or(0.0)
+    let f1m = s0.f1_mean.unwrap_or(0.0)
+    let f2m = s0.f2_mean.unwrap_or(0.0)
+    let im = s0.intensity_mean.unwrap_or(0.0)
+    let p20 = s0.trajectory[0].f1.unwrap_or(0.0)
+    let p50 = s0.trajectory[1].f1.unwrap_or(0.0)
+    let p80 = s0.trajectory[2].f1.unwrap_or(0.0)
+    println(
+      "textgrid[\{s0.label}]: F0 \{f0m} Hz, F1 \{f1m} Hz (20/50/80%: \{p20}/\{p50}/\{p80}), F2 \{f2m} Hz, I \{im} dB",
+    )
+  }
 }

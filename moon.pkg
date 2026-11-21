@@ -1,5 +1,6 @@
 import {
   "wrinh/ngan/analysis",
+  "wrinh/ngan/textgrid",
   "wrinh/ngan/types",
 }
 

@@ -1,0 +1,19 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "wrinh/ngan/textgrid"
+
+import {
+  "wrinh/ngan/types",
+}
+
+// Values
+pub fn parse_textgrid(String) -> @types.TextGrid raise @types.TextGridError
+
+pub fn to_textgrid_string(@types.TextGrid, short? : Bool) -> String
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

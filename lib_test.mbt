@@ -99,3 +99,76 @@ test "facade voice quality, formant tracking, ltas and scales" {
   let tilt = @ngan.spectral_tilt(x, sample_rate=fs, pitch=p_cc)
   assert_eq(tilt.frames.length(), p_cc.frames.length())
 }
+
+///|
+test "facade TextGrid parsing and segment acoustic summarization" {
+  let fs = 16000.0
+  let x = sine_fa(16000, fs, 220.0)
+  let tg_src =
+    #|File type = "ooTextFile"
+    #|Object class = "TextGrid"
+    #|xmin = 0
+    #|xmax = 1.0
+    #|tiers? <exists>
+    #|size = 1
+    #|item []:
+    #|    item [1]:
+    #|        class = "IntervalTier"
+    #|        name = "segments"
+    #|        xmin = 0
+    #|        xmax = 1.0
+    #|        intervals: size = 3
+    #|        intervals [1]:
+    #|            xmin = 0
+    #|            xmax = 0.2
+    #|            text = ""
+    #|        intervals [2]:
+    #|            xmin = 0.2
+    #|            xmax = 0.8
+    #|            text = "a"
+    #|        intervals [3]:
+    #|            xmin = 0.8
+    #|            xmax = 1.0
+    #|            text = ""
+  let tg = @ngan.parse_textgrid(tg_src)
+  let serialized = @ngan.to_textgrid_string(tg, short=true)
+  assert_eq(@ngan.parse_textgrid(serialized), tg)
+
+  let segs = @ngan.analyze_textgrid_segments(
+    x,
+    sample_rate=fs,
+    tg_src,
+    tier_name="segments",
+  )
+  assert_eq(segs.length(), 1)
+  let seg = segs[0]
+  assert_eq(seg.tier_name, "segments")
+  assert_eq(seg.index, 1)
+  assert_eq(seg.label, "a")
+  assert_true(approx(seg.duration, 0.6, 1.0e-12))
+  assert_true(approx(seg.f0_mean.unwrap(), 220.0, 0.3))
+  assert_true(approx(seg.intensity_mean.unwrap(), 90.96910013, 0.1))
+  assert_eq(seg.trajectory.length(), 3)
+  assert_true(approx(seg.trajectory[0].time, 0.32, 1.0e-12))
+  assert_true(approx(seg.trajectory[1].time, 0.50, 1.0e-12))
+  assert_true(approx(seg.trajectory[2].time, 0.68, 1.0e-12))
+  assert_true(approx(seg.trajectory[1].f0.unwrap(), 220.0, 0.3))
+  assert_true(approx(seg.trajectory[1].intensity.unwrap(), 90.96910013, 0.1))
+
+  // Verify summarize_textgrid directly with precomputed tiers
+  let it = @ngan.intensity(x, sample_rate=fs)
+  let pt = @ngan.pitch(x, sample_rate=fs)
+  let ft = @ngan.formants(x, sample_rate=fs)
+  let direct = @ngan.summarize_textgrid(tg, pitch=pt, formants=ft, intensity=it)
+  assert_eq(direct, segs)
+
+  // Malformed TextGrid propagates TextGridError
+  let bad = try
+    @ngan.analyze_textgrid_segments(x, sample_rate=fs, "bad")
+  catch {
+    err => err
+  } noraise {
+    _ => fail("expected TextGridError")
+  }
+  assert_true(bad is @ngan.TextGridError::InvalidFormat(_))
+}

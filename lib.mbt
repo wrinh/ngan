@@ -21,6 +21,7 @@
 // - `spectrogram`        <-> `To Spectrogram...`
 // - `ltas`               <-> `To Ltas...`
 // - `center_of_gravity`  <-> `Spectrum: Get centre of gravity...`
+// - `parse_textgrid` / `analyze_textgrid_segments` <-> `.TextGrid` segment summary
 
 ///|
 pub using @types {
@@ -40,6 +41,15 @@ pub using @types {
   type SpectralFeatureTier,
   type SpectralTiltFrame,
   type SpectralTiltTier,
+  type TextInterval,
+  type TextPoint,
+  type IntervalTier,
+  type PointTier,
+  type TextGridTier,
+  type TextGrid,
+  type TextGridError,
+  type SegmentTrajectoryPoint,
+  type SegmentSummary,
   hz_to_semitones,
   semitones_to_hz,
   hz_to_erb,
@@ -47,6 +57,9 @@ pub using @types {
   hz_to_mel,
   mel_to_hz,
 }
+
+///|
+pub using @textgrid {parse_textgrid, to_textgrid_string}
 
 ///|
 pub using @analysis {
@@ -68,6 +81,9 @@ pub using @analysis {
   spectrogram_center_of_gravity,
   spectrogram_spectral_slope,
   spectral_tilt,
+  summarize_interval_tier,
+  summarize_textgrid,
+  analyze_segments,
 }
 
 ///|
@@ -203,4 +219,41 @@ pub fn analyze_all(
     pitch_frames: pt.frames,
     formant_frames: ft.frames,
   }
+}
+
+///|
+/// Parse a Praat `.TextGrid` string, run intensity, pitch, and formant
+/// analysis on `samples`, and summarize acoustic features across the
+/// annotated intervals (default 20%–50%–80% dynamic trajectory points).
+pub fn analyze_textgrid_segments(
+  samples : FixedArray[Double],
+  sample_rate~ : Double,
+  textgrid_src : String,
+  tier_name? : String,
+  trajectory_points~ : ArrayView[Double] = [0.2, 0.5, 0.8],
+  skip_empty~ : Bool = true,
+  energy_intensity~ : Bool = true,
+  min_pitch~ : Double = 100.0,
+  pitch_floor~ : Double = 75.0,
+  pitch_ceiling~ : Double = 600.0,
+  max_num_formants~ : Int32 = 5,
+  max_formant_freq~ : Double = 5500.0,
+  use_formant_tracking~ : Bool = false,
+) -> Array[@types.SegmentSummary] raise @types.TextGridError {
+  let tg = @textgrid.parse_textgrid(textgrid_src)
+  @analysis.analyze_segments(
+    samples,
+    sample_rate~,
+    tg,
+    tier_name?,
+    trajectory_points~,
+    skip_empty~,
+    energy_intensity~,
+    min_pitch~,
+    pitch_floor~,
+    pitch_ceiling~,
+    max_num_formants~,
+    max_formant_freq~,
+    use_formant_tracking~,
+  )
 }

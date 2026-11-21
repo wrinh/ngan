@@ -101,6 +101,35 @@ pub fn PitchTier::value_at(self : PitchTier, t : Double) -> Double? {
 }
 
 ///|
+/// Mean fundamental frequency (Hz) over voiced frames within
+/// `[tmin, tmax]` (or over the whole tier when `tmax <= tmin`), matching
+/// Praat `Pitch: Get mean... Hertz`.
+pub fn PitchTier::mean(
+  self : PitchTier,
+  tmin~ : Double = 0.0,
+  tmax~ : Double = 0.0,
+) -> Double? {
+  let use_all = tmax <= tmin
+  let mut sum = 0.0
+  let mut count = 0
+  for fr in self.frames {
+    if use_all || (fr.time >= tmin && fr.time <= tmax) {
+      if fr.frequency is Some(f0) {
+        sum += f0
+        count += 1
+      }
+    }
+  }
+  if count > 0 {
+    Some(sum / count.to_double())
+  } else if !use_all {
+    self.value_at(0.5 * (tmin + tmax))
+  } else {
+    None
+  }
+}
+
+///|
 /// Convert every voiced frame of `PitchTier` to semitones relative to
 /// `reference_hz`, preserving `None` for unvoiced frames.
 pub fn PitchTier::to_semitones(

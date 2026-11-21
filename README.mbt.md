@@ -16,6 +16,7 @@
 | `@ngan.ltas` / `spectrogram_to_ltas` | `To Ltas...` | Long-Term Average Spectrum (dB/Hz), band means & slope |
 | `@ngan.center_of_gravity` / `spectral_tilt` | `Get centre of gravity...` | Spectral centroid, spectral slope, H1–H2, H1*–H2*, H1–A1..A3 |
 | `PitchTier::to_semitones` / `to_erb` / `to_mel` | `hertzToSemitones/Erb/Mel` | Praat psychoacoustic pitch scale conversions |
+| `@ngan.parse_textgrid` / `analyze_textgrid_segments` | `.TextGrid` + interval queries | Long/Short/Chronological TextGrid parser + F0, F1–F3, intensity & 20%–50%–80% segment summaries |
 
 Behavior is ported line-by-line from the Praat sources (`fon/Sound_to_Intensity.cpp`, `fon/Sound_to_Pitch.cpp`, `fon/Pitch.cpp`, `fon/Sound_to_Formant.cpp`, `fon/Sound_and_Spectrogram.cpp`, `dwsys/NUM2.cpp`): identical windows, identical normalizations, identical frame layouts and identical decision rules — see *Praat parity notes* below.
 
@@ -92,6 +93,47 @@ test {
 }
 ```
 
+Segment-level summarization from a Praat `.TextGrid` (F0, F1–F3, intensity, and 20%–50%–80% trajectory points):
+
+```mbt check
+///|
+test {
+  let fs = 16000.0
+  let samples : FixedArray[Double] = FixedArray::make(16000, 0.0)
+  for i in 0..<16000 {
+    samples[i] = @math.sin(2.0 * @math.PI * 220.0 * i.to_double() / fs)
+  }
+  let tg_src =
+    #|File type = "ooTextFile"
+    #|Object class = "TextGrid"
+    #|xmin = 0
+    #|xmax = 1.0
+    #|tiers? <exists>
+    #|size = 1
+    #|item []:
+    #|    item [1]:
+    #|        class = "IntervalTier"
+    #|        name = "vowels"
+    #|        xmin = 0
+    #|        xmax = 1.0
+    #|        intervals: size = 1
+    #|        intervals [1]:
+    #|            xmin = 0.2
+    #|            xmax = 0.8
+    #|            text = "a"
+  let segs = @ngan.analyze_textgrid_segments(
+    samples,
+    sample_rate=fs,
+    tg_src,
+    tier_name="vowels",
+  )
+  assert_eq(segs.length(), 1)
+  assert_eq(segs[0].trajectory.length(), 3)
+  assert_true(segs[0].f0_mean is Some(_))
+  assert_true(segs[0].intensity_mean is Some(_))
+}
+```
+
 Every analyzer also has a fully parameterized form with labeled, defaulted arguments mirroring the Praat dialog boxes:
 
 ```moonbit nocheck
@@ -149,7 +191,8 @@ ngan
 ├── types/                # shared result types + Semitone/ERB/Mel conversions
 ├── math/                 # Complex, Bessel I0, Durand-Kerner polynomial roots, libm re-exports
 ├── dsp/                  # radix-2 FFT, cross-correlation, Kaiser/Hann/Gaussian windows, sinc resampler, Burg LPC
-├── analysis/             # intensity, pitch (ac/cc), harmonicity, point_process, jitter/shimmer, formants & tracking, spectrogram, ltas, spectral_features
+├── analysis/             # intensity, pitch (ac/cc), harmonicity, point_process, jitter/shimmer, formants & tracking, spectrogram, ltas, spectral_features, segment_summary
+├── textgrid/             # Praat .TextGrid parser & serializer (Long, Short, Chronological)
 └── cmd/main              # demo executable
 ```
 

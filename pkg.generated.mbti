@@ -22,7 +22,11 @@ pub fn analyze_pitch(FixedArray[Double], Double, Double, Double) -> @types.Pitch
 
 pub fn analyze_pitch_cc(FixedArray[Double], Double, Double, Double) -> @types.PitchTier
 
+pub fn analyze_segments(FixedArray[Double], sample_rate~ : Double, @types.TextGrid, tier_name? : String, trajectory_points? : ArrayView[Double], skip_empty? : Bool, energy_intensity? : Bool, min_pitch? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_num_formants? : Int32, max_formant_freq? : Double, use_formant_tracking? : Bool) -> Array[@types.SegmentSummary]
+
 pub fn analyze_spectrogram(FixedArray[Double], Double, Double, Double, Double, Double) -> @types.Spectrogram
+
+pub fn analyze_textgrid_segments(FixedArray[Double], sample_rate~ : Double, String, tier_name? : String, trajectory_points? : ArrayView[Double], skip_empty? : Bool, energy_intensity? : Bool, min_pitch? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_num_formants? : Int32, max_formant_freq? : Double, use_formant_tracking? : Bool) -> Array[@types.SegmentSummary] raise @types.TextGridError
 
 pub fn center_of_gravity(FixedArray[Double], sample_rate~ : Double, power? : Double, fmin? : Double, fmax? : Double) -> Double?
 
@@ -48,6 +52,8 @@ pub fn ltas(FixedArray[Double], sample_rate~ : Double, bandwidth? : Double) -> @
 
 pub fn mel_to_hz(Double) -> Double
 
+pub fn parse_textgrid(String) -> @types.TextGrid raise @types.TextGridError
+
 pub fn pitch(FixedArray[Double], sample_rate~ : Double, time_step? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_candidates? : Int32, voicing_threshold? : Double, silence_threshold? : Double, octave_cost? : Double, octave_jump_cost? : Double, voiced_unvoiced_cost? : Double) -> @types.PitchTier
 
 pub fn pitch_cc(FixedArray[Double], sample_rate~ : Double, time_step? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_candidates? : Int32, voicing_threshold? : Double, silence_threshold? : Double, octave_cost? : Double, octave_jump_cost? : Double, voiced_unvoiced_cost? : Double) -> @types.PitchTier
@@ -70,6 +76,12 @@ pub fn spectrogram_spectral_slope(@types.Spectrogram, fmin? : Double, fmax? : Do
 
 pub fn spectrogram_to_ltas(@types.Spectrogram, bandwidth? : Double) -> @types.Ltas
 
+pub fn summarize_interval_tier(@types.IntervalTier, pitch~ : @types.PitchTier, formants~ : @types.FormantTier, intensity~ : @types.IntensityTier, trajectory_points? : ArrayView[Double], skip_empty? : Bool, energy_intensity? : Bool) -> Array[@types.SegmentSummary]
+
+pub fn summarize_textgrid(@types.TextGrid, pitch~ : @types.PitchTier, formants~ : @types.FormantTier, intensity~ : @types.IntensityTier, tier_name? : String, trajectory_points? : ArrayView[Double], skip_empty? : Bool, energy_intensity? : Bool) -> Array[@types.SegmentSummary]
+
+pub fn to_textgrid_string(@types.TextGrid, short? : Bool) -> String
+
 pub fn track_formants(@types.FormantTier, num_tracks? : Int32, ref_f1? : Double, ref_f2? : Double, ref_f3? : Double, ref_f4? : Double, ref_f5? : Double, frequency_cost? : Double, bandwidth_cost? : Double, transition_cost? : Double) -> @types.FormantTier
 
 // Errors
@@ -89,6 +101,8 @@ pub using @types {type HarmonicityTier}
 
 pub using @types {type IntensityTier}
 
+pub using @types {type IntervalTier}
+
 pub using @types {type JitterMetrics}
 
 pub using @types {type Ltas}
@@ -99,6 +113,12 @@ pub using @types {type PitchTier}
 
 pub using @types {type PointProcess}
 
+pub using @types {type PointTier}
+
+pub using @types {type SegmentSummary}
+
+pub using @types {type SegmentTrajectoryPoint}
+
 pub using @types {type ShimmerMetrics}
 
 pub using @types {type SpectralFeatureTier}
@@ -108,5 +128,15 @@ pub using @types {type SpectralTiltFrame}
 pub using @types {type SpectralTiltTier}
 
 pub using @types {type Spectrogram}
+
+pub using @types {type TextGrid}
+
+pub using @types {type TextGridError}
+
+pub using @types {type TextGridTier}
+
+pub using @types {type TextInterval}
+
+pub using @types {type TextPoint}
 
 // Traits

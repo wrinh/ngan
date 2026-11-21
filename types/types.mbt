@@ -85,6 +85,179 @@ pub fn IntensityTier::value_at(self : IntensityTier, t : Double) -> Double? {
 }
 
 ///|
+/// Linearly interpolated intensity lookup at time `t` (dB SPL), clamping
+/// half-frame margins to the boundary frames. Returns `None` when empty or
+/// outside `[t1 - 0.5 * dt, t1 + (n - 0.5) * dt]`.
+pub fn IntensityTier::value_at_linear(
+  self : IntensityTier,
+  t : Double,
+) -> Double? {
+  let n = self.values.length()
+  if n == 0 || self.dt <= 0.0 {
+    return None
+  }
+  let rf = (t - self.t1) / self.dt
+  if rf < -0.5 || rf > (n - 1).to_double() + 0.5 {
+    return None
+  }
+  let i0 = @math.floor_int(rf)
+  let i1 = i0 + 1
+  if i0 < 0 {
+    return Some(self.values[0])
+  }
+  if i1 >= n {
+    return Some(self.values[n - 1])
+  }
+  let frac = rf - i0.to_double()
+  Some(self.values[i0] + frac * (self.values[i1] - self.values[i0]))
+}
+
+///|
+/// Mean intensity (dB SPL) over `[tmin, tmax]` (or over the whole tier
+/// when `tmax <= tmin`), matching Praat `Intensity: Get mean...`.
+/// When `energy` is `true` (default), averages linear energy `10^(dB/10)`
+/// before converting back to dB; otherwise averages dB values directly.
+pub fn IntensityTier::mean(
+  self : IntensityTier,
+  tmin~ : Double = 0.0,
+  tmax~ : Double = 0.0,
+  energy~ : Bool = true,
+) -> Double? {
+  let n = self.values.length()
+  if n == 0 {
+    return None
+  }
+  let use_all = tmax <= tmin
+  let mut sum = 0.0
+  let mut count = 0
+  for i in 0..<n {
+    let t = self.t1 + i.to_double() * self.dt
+    if use_all || (t >= tmin && t <= tmax) {
+      let v = self.values[i]
+      if energy {
+        sum += @math.pow(10.0, v / 10.0)
+      } else {
+        sum += v
+      }
+      count += 1
+    }
+  }
+  if count == 0 {
+    if !use_all {
+      return self.value_at_linear(0.5 * (tmin + tmax))
+    }
+    return None
+  }
+  if energy {
+    let mean_e = sum / count.to_double()
+    if mean_e <= 1.0e-30 {
+      Some(-300.0)
+    } else {
+      Some(10.0 * @math.log10(mean_e))
+    }
+  } else {
+    Some(sum / count.to_double())
+  }
+}
+
+///|
+fn formant_tier_interp_at(
+  tier : FormantTier,
+  formant_number : Int32,
+  t : Double,
+  pick : (FormantValue) -> Double,
+) -> Double? {
+  let n = tier.frames.length()
+  if n == 0 || tier.dt <= 0.0 || formant_number < 1 {
+    return None
+  }
+  let rf = (t - tier.t1) / tier.dt
+  if rf < -0.5 || rf > (n - 1).to_double() + 0.5 {
+    return None
+  }
+  let idx = formant_number - 1
+  fn frame_val(fr : FormantFrame) -> Double? {
+    if idx < fr.formants.length() {
+      Some(pick(fr.formants[idx]))
+    } else {
+      None
+    }
+  }
+  let i0 = @math.floor_int(rf)
+  let i1 = i0 + 1
+  if i0 < 0 {
+    return frame_val(tier.frames[0])
+  }
+  if i1 >= n {
+    return frame_val(tier.frames[n - 1])
+  }
+  let frac = rf - i0.to_double()
+  match (frame_val(tier.frames[i0]), frame_val(tier.frames[i1])) {
+    (Some(v0), Some(v1)) => Some(v0 + frac * (v1 - v0))
+    (Some(v0), None) => if frac < 0.5 { Some(v0) } else { None }
+    (None, Some(v1)) => if frac >= 0.5 { Some(v1) } else { None }
+    (None, None) => None
+  }
+}
+
+///|
+/// Linearly interpolated frequency (Hz) for 1-based `formant_number`
+/// (`1` = F1, `2` = F2, ...) at time `t`, matching Praat
+/// `Formant: Get value at time... Linear`.
+pub fn FormantTier::value_at(
+  self : FormantTier,
+  formant_number : Int32,
+  t : Double,
+) -> Double? {
+  formant_tier_interp_at(self, formant_number, t, fv => fv.frequency)
+}
+
+///|
+/// Linearly interpolated bandwidth (Hz) for 1-based `formant_number`
+/// (`1` = F1, `2` = F2, ...) at time `t`, matching Praat
+/// `Formant: Get bandwidth at time... Linear`.
+pub fn FormantTier::bandwidth_at(
+  self : FormantTier,
+  formant_number : Int32,
+  t : Double,
+) -> Double? {
+  formant_tier_interp_at(self, formant_number, t, fv => fv.bandwidth)
+}
+
+///|
+/// Mean frequency (Hz) for 1-based `formant_number` (`1` = F1, `2` = F2,
+/// ...) over `[tmin, tmax]` (or over the whole tier when `tmax <= tmin`).
+pub fn FormantTier::mean(
+  self : FormantTier,
+  formant_number : Int32,
+  tmin~ : Double = 0.0,
+  tmax~ : Double = 0.0,
+) -> Double? {
+  if formant_number < 1 {
+    return None
+  }
+  let idx = formant_number - 1
+  let use_all = tmax <= tmin
+  let mut sum = 0.0
+  let mut count = 0
+  for fr in self.frames {
+    if use_all || (fr.time >= tmin && fr.time <= tmax) {
+      if idx < fr.formants.length() {
+        sum += fr.formants[idx].frequency
+        count += 1
+      }
+    }
+  }
+  if count > 0 {
+    Some(sum / count.to_double())
+  } else if !use_all {
+    self.value_at(formant_number, 0.5 * (tmin + tmax))
+  } else {
+    None
+  }
+}
+
+///|
 /// Time-frequency grid of power spectral density values in Pa^2/Hz,
 /// matching Praat's Spectrogram object: frames at `t1 + i * dt`,
 /// frequency bands centred at `f1 + j * df`. The `power` array is
