@@ -70,6 +70,27 @@ test "facade voice quality, formant tracking, ltas and scales" {
   )
   assert_true(approx(@ngan.erb_to_hz(@ngan.hz_to_erb(220.0)), 220.0, 1.0e-9))
   assert_true(approx(@ngan.mel_to_hz(@ngan.hz_to_mel(220.0)), 220.0, 1.0e-9))
+  assert_true(approx(@ngan.bark_to_hz(@ngan.hz_to_bark(220.0)), 220.0, 1.0e-9))
+
+  let p_fac = @ngan.analyze_pitch_filtered_ac(x, fs, 50.0, 800.0)
+  guard p_fac.mean() is Some(f_fac) else { fail("filtered_ac unvoiced") }
+  assert_true(approx(f_fac, 220.0, 0.5))
+
+  let vr = @ngan.voice_report(x, sample_rate=fs)
+  assert_eq(vr.number_of_voice_breaks, 0)
+  assert_true(vr.fraction_locally_unvoiced < 0.05)
+
+  assert_true(@ngan.analyze_cpps(x, fs) is Some(_))
+  let mf = @ngan.analyze_mfcc(x, fs, 12)
+  assert_true(mf.frames.length() > 10)
+  let bark_sg = @ngan.bark_spectrogram(x, sample_rate=fs)
+  assert_true(bark_sg.number_of_filters > 10)
+  let psola_out = @ngan.resynthesize_psola(
+    x,
+    sample_rate=fs,
+    duration_factor=1.2,
+  )
+  assert_true(psola_out.length() > x.length())
 
   let hac = @ngan.analyze_harmonicity_ac(x, fs, 75.0)
   let hcc = @ngan.analyze_harmonicity_cc(x, fs, 75.0)

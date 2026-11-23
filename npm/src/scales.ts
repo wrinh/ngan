@@ -59,6 +59,26 @@ export function melToHz(mel: number): number {
 }
 
 /**
+ * Convert frequency in Hz to Praat's Bark scale (`NUMhertzToBark`):
+ * `7 * ln(hz / 650 + sqrt(1 + (hz / 650)^2))`.
+ */
+export function hzToBark(hz: number): number {
+  if (hz < 0) return 0;
+  const r = hz / 650;
+  return 7 * Math.log(r + Math.sqrt(1 + r * r));
+}
+
+/**
+ * Convert Praat's Bark scale value back to frequency in Hz
+ * (`NUMbarkToHertz`): `325 * (exp(bark / 7) - exp(-bark / 7))`.
+ */
+export function barkToHz(bark: number): number {
+  if (bark < 0) return 0;
+  const e = Math.exp(bark / 7);
+  return 325 * (e - 1 / e);
+}
+
+/**
  * Convert linear power spectral density (Pa^2/Hz) or pressure^2 to dB
  * relative to `referencePower` (default `1.0` for relative spectrogram dB,
  * or pass `4e-10` for dB SPL re 2e-5 Pa).

@@ -348,3 +348,161 @@ pub fn shimmer(
   let apq11 = if amp_apq11 > 0.0 { Some(sum_apq11 / amp_apq11) } else { None }
   { local_rel, local_db, apq3, apq5, apq11, dda, }
 }
+
+///|
+/// Compute Praat Voice Report voicing continuity and voice break metrics:
+/// - `fraction_locally_unvoiced`: proportion of pitch frames that are unvoiced
+/// - `number_of_voice_breaks`: count of inter-pulse gaps exceeding `max_period_factor / pitch_floor`
+/// - `degree_of_voice_breaks`: fraction of `[tmin, tmax]` outside contiguous voiced pulse runs.
+pub fn voice_breaks(
+  pitch : @types.PitchTier,
+  pp : @types.PointProcess,
+  tmin~ : Double = 0.0,
+  tmax~ : Double = 0.0,
+  pitch_floor~ : Double = 75.0,
+  max_period_factor~ : Double = 1.25,
+) -> @types.VoiceBreaks {
+  let use_all = tmax <= tmin
+  let (t_lo, t_hi) = if !use_all {
+    (tmin, tmax)
+  } else if pp.tmax > pp.tmin {
+    (pp.tmin, pp.tmax)
+  } else if pitch.frames.length() > 0 && pitch.dt > 0.0 {
+    (
+      pitch.t1 - 0.5 * pitch.dt,
+      pitch.t1 + (pitch.frames.length().to_double() - 0.5) * pitch.dt,
+    )
+  } else {
+    (0.0, 0.0)
+  }
+  let mut total_frames = 0
+  let mut unvoiced_frames = 0
+  for fr in pitch.frames {
+    if use_all || (fr.time >= t_lo && fr.time <= t_hi) {
+      total_frames += 1
+      if fr.frequency is None {
+        unvoiced_frames += 1
+      }
+    }
+  }
+  let fraction_locally_unvoiced = if total_frames > 0 {
+    unvoiced_frames.to_double() / total_frames.to_double()
+  } else {
+    1.0
+  }
+  let dur = t_hi - t_lo
+  if dur <= 0.0 {
+    return {
+      number_of_voice_breaks: 0,
+      degree_of_voice_breaks: 0.0,
+      fraction_locally_unvoiced,
+    }
+  }
+  let max_period = if pitch_floor > 0.0 {
+    max_period_factor / pitch_floor
+  } else {
+    0.016666666666666666
+  }
+  let sel : Array[Double] = []
+  for i in 0..<pp.points.length() {
+    let p = pp.points[i]
+    if p >= t_lo && p <= t_hi {
+      sel.push(p)
+    }
+  }
+  if sel.length() < 2 {
+    return {
+      number_of_voice_breaks: 0,
+      degree_of_voice_breaks: 1.0,
+      fraction_locally_unvoiced,
+    }
+  }
+  let mut num_breaks = 0
+  let mut break_dur = 0.0
+  for i in 0..<(sel.length() - 1) {
+    let gap = sel[i + 1] - sel[i]
+    if gap > max_period {
+      num_breaks += 1
+      break_dur += gap
+    }
+  }
+  let leading = sel[0] - t_lo
+  if leading > max_period {
+    break_dur += leading
+  }
+  let trailing = t_hi - sel[sel.length() - 1]
+  if trailing > max_period {
+    break_dur += trailing
+  }
+  {
+    number_of_voice_breaks: num_breaks,
+    degree_of_voice_breaks: @math.clamp01(break_dur / dur),
+    fraction_locally_unvoiced,
+  }
+}
+
+///|
+/// Compute the full Praat-style Voice Report combining pitch, pulses, HNR,
+/// fraction of locally unvoiced frames, voice breaks, jitter, and shimmer.
+pub fn voice_report(
+  samples : FixedArray[Double],
+  sample_rate~ : Double,
+  tmin~ : Double = 0.0,
+  tmax~ : Double = 0.0,
+  pitch_floor~ : Double = 75.0,
+  pitch_ceiling~ : Double = 600.0,
+  max_period_factor~ : Double = 1.3,
+  max_amplitude_factor~ : Double = 1.6,
+  use_filtered_ac~ : Bool = false,
+) -> @types.VoiceReport {
+  let pt = if use_filtered_ac {
+    pitch_filtered_ac(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
+  } else {
+    pitch(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
+  }
+  let pp = sound_and_pitch_to_point_process_cc(samples, sample_rate~, pitch=pt)
+  let vb = voice_breaks(
+    pt,
+    pp,
+    tmin~,
+    tmax~,
+    pitch_floor~,
+    max_period_factor=1.25,
+  )
+  let shortest_period = if pitch_ceiling > 0.0 {
+    0.8 / pitch_ceiling
+  } else {
+    0.0001
+  }
+  let longest_period = if pitch_floor > 0.0 { 1.25 / pitch_floor } else { 0.02 }
+  let jit = jitter(
+    pp,
+    tmin~,
+    tmax~,
+    shortest_period~,
+    longest_period~,
+    max_period_factor~,
+  )
+  let shim = shimmer(
+    samples,
+    sample_rate~,
+    pp~,
+    tmin~,
+    tmax~,
+    shortest_period~,
+    longest_period~,
+    max_period_factor~,
+    max_amplitude_factor~,
+  )
+  let hnr = harmonicity_ac(samples, sample_rate~, min_pitch=pitch_floor)
+  {
+    pulses: pp.points,
+    mean_pitch_hz: pt.mean(),
+    mean_hnr_db: hnr.mean(),
+    fraction_locally_unvoiced: vb.fraction_locally_unvoiced,
+    number_of_voice_breaks: vb.number_of_voice_breaks,
+    degree_of_voice_breaks: vb.degree_of_voice_breaks,
+    jitter: jit,
+    shimmer: shim,
+  }
+}

@@ -17,6 +17,8 @@ import {
   erbToHz,
   hzToMel,
   melToHz,
+  hzToBark,
+  barkToHz,
   spectrogramToDbMatrix,
 } from '../dist/index.js';
 
@@ -123,6 +125,11 @@ test('analyzePitch (ac and cc) recovers 220 Hz and rejects silence', async () =>
   assert.ok(midCc.frequency !== null);
   assert.ok(Math.abs(midCc.frequency - 220) < 0.5);
 
+  const fac = engine.analyzePitch(samples, fs, { method: 'filtered_ac' });
+  const midFac = fac.frames[Math.floor(fac.frames.length / 2)];
+  assert.ok(midFac.frequency !== null);
+  assert.ok(Math.abs(midFac.frequency - 220) < 0.5);
+
   const silence = new Float32Array(fs * 0.5);
   const silentPitch = engine.analyzePitch(silence, fs);
   assert.ok(silentPitch.frames.every((f) => f.frequency === null));
@@ -195,8 +202,43 @@ test('analyzeHarmonicity, analyzeSpectrogram, analyzeVoiceReport, analyzeSpectra
   assert.ok(voice.pulses.length > 50);
   assert.ok(voice.meanPitchHz !== null && voice.meanPitchHz > 160);
   assert.ok(voice.meanHnrDb !== null);
+  assert.equal(voice.numberOfVoiceBreaks, 0);
+  assert.ok(voice.fractionLocallyUnvoiced < 0.1);
+  assert.ok(voice.degreeOfVoiceBreaks < 0.1);
   assert.ok(voice.jitter.localRel !== null);
   assert.ok(voice.shimmer.localRel !== null);
+
+  const cppsRes = engine.analyzeCpps(vowel, fs, {
+    includeCepstrogram: true,
+    maxTimeColumns: 100,
+  });
+  assert.ok(cppsRes.cppsDb !== null && cppsRes.cppsDb > 5.0);
+  assert.ok(cppsRes.cepstrogram !== null);
+  assert.ok(cppsRes.cepstrogram.numberOfTimeFrames <= 100);
+
+  const mfccRes = engine.analyzeMfcc(vowel, fs, { numberOfCoefficients: 12 });
+  assert.ok(mfccRes.frames.length > 50);
+  assert.equal(mfccRes.frames[0].coeffs.length, 12);
+
+  const melSg = engine.analyzeMelSpectrogram(sine1k, fs, { maxTimeColumns: 80 });
+  assert.ok(melSg.scale === 'mel' && melSg.numberOfFilters >= 10);
+  assert.ok(melSg.numberOfTimeFrames <= 80);
+
+  const barkSg = engine.analyzeBarkSpectrogram(sine1k, fs, { maxTimeColumns: 80 });
+  assert.ok(barkSg.scale === 'bark' && barkSg.numberOfFilters >= 15);
+  assert.ok(barkSg.numberOfTimeFrames <= 80);
+
+  const stretched = engine.manipulatePsola(vowel, fs, {
+    durationFactor: 1.3,
+    pitchShiftSemitones: 3.0,
+  });
+  assert.ok(Math.abs(stretched.length - vowel.length * 1.3) < 128);
+  const shiftedPitch = engine.analyzePitch(stretched, fs);
+  const voicedShifted = shiftedPitch.frames.filter((f) => f.frequency !== null);
+  const meanShifted =
+    voicedShifted.reduce((s, f) => s + f.frequency, 0) / voicedShifted.length;
+  // Original vowel glides 180->220 (~200 Hz); +3 semitones (~1.189x) -> ~238 Hz.
+  assert.ok(meanShifted > 220 && meanShifted < 260, `meanShifted=${meanShifted}`);
 });
 
 test('analyzeTextGridSegments parses TextGrid and handles errors', async () => {
@@ -391,4 +433,5 @@ test('Float64RingBuffer, resampleSinc, and psychoacoustic scales', () => {
   assert.ok(Math.abs(semitonesToHz(hzToSemitones(220)) - 220) < 1e-9);
   assert.ok(Math.abs(erbToHz(hzToErb(1000)) - 1000) < 1e-6);
   assert.ok(Math.abs(melToHz(hzToMel(1000)) - 1000) < 1e-6);
+  assert.ok(Math.abs(barkToHz(hzToBark(1000)) - 1000) < 1e-6);
 });

@@ -4,13 +4,21 @@ package "wrinh/ngan/web"
 // Values
 pub fn alloc_samples(Int32) -> Int32
 
+pub fn analyze_cepstrogram_cpps_json(Double, Double, Double, Double, Double, Int32, Double, Double, Double, Double, Int32, Int32) -> String
+
 pub fn analyze_csv(String, Double) -> String
+
+pub fn analyze_filterbank_spectrogram_json(Double, Int32, Double, Double, Double, Double, Double, Int32) -> String
 
 pub fn analyze_formants_json(Double, Double, Int32, Double, Double, Double, Int32, Int32, Double, Double, Double, Double, Double) -> String
 
 pub fn analyze_harmonicity_json(Double, Double, Double, Double, Double, Int32) -> String
 
 pub fn analyze_intensity_json(Double, Double, Double, Int32) -> String
+
+pub fn analyze_mfcc_json(Double, Int32, Double, Double, Double, Double, Double) -> String
+
+pub fn analyze_pitch_filtered_ac_json(Double, Double, Double, Double, Int32, Int32, Double, Double, Double, Double, Double, Double) -> String
 
 pub fn analyze_pitch_json(Double, Double, Double, Double, Int32, Double, Double, Double, Double, Double, Int32) -> String
 
@@ -22,7 +30,13 @@ pub fn analyze_textgrid_json(Double, String, String, Double, Double, Double, Int
 
 pub fn analyze_voice_report_json(Double, Double, Double, Double, Double) -> String
 
+pub fn get_out_sample(Int32) -> Double
+
 pub fn get_sample(Int32) -> Double
+
+pub fn manipulate_psola(Double, String, String, Double, Double, Double, Double, Double) -> Int32
+
+pub fn out_samples_len() -> Int32
 
 pub fn ring_analyze_frame_json(Double, Int32, Double, Double, Double, Int32, Double) -> String
 

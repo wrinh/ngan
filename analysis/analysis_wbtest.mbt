@@ -196,3 +196,38 @@ test "formants after internal band-limited resampling" {
   assert_true(@math.abs(mean_f1 - 500.0) < 55.0)
   assert_true(@math.abs(mean_f2 - 1500.0) < 90.0)
 }
+
+///|
+test "pitch_filtered_ac tracks 220 Hz sine and harmonic complex and rejects silence" {
+  let fs = 16000.0
+  let n = 16000
+  let x = sine_fa(n, fs, 220.0, 1.0, 0.0)
+  let pt = pitch_filtered_ac(x, sample_rate=fs)
+  guard pt.mean() is Some(m) else { fail("expected voiced filtered_ac pitch") }
+  assert_true(approx(m, 220.0, 0.5))
+
+  let pt_acc = pitch_filtered_ac(x, sample_rate=fs, very_accurate=true)
+  guard pt_acc.mean() is Some(m_acc) else {
+    fail("expected voiced very_accurate filtered_ac pitch")
+  }
+  assert_true(approx(m_acc, 220.0, 0.5))
+
+  // Rich harmonic complex at 180 Hz with weak fundamental and strong upper harmonics.
+  let comp : FixedArray[Double] = FixedArray::make(n, 0.0)
+  for i in 0..<n {
+    let t = i.to_double() / fs
+    comp[i] = 0.2 * @math.sin(2.0 * @math.PI * 180.0 * t) +
+      0.8 * @math.sin(2.0 * @math.PI * 360.0 * t) +
+      1.0 * @math.sin(2.0 * @math.PI * 540.0 * t) +
+      0.7 * @math.sin(2.0 * @math.PI * 720.0 * t)
+  }
+  let pt_comp = pitch_filtered_ac(comp, sample_rate=fs)
+  guard pt_comp.mean() is Some(m_comp) else {
+    fail("expected voiced harmonic complex pitch")
+  }
+  assert_true(approx(m_comp, 180.0, 2.0))
+
+  let silence : FixedArray[Double] = FixedArray::make(8000, 0.0)
+  let pt_sil = pitch_filtered_ac(silence, sample_rate=fs)
+  assert_true(pt_sil.mean() is None)
+}

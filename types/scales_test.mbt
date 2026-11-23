@@ -38,7 +38,13 @@ test "psychoacoustic scale conversions and round trips" {
     )
     assert_true(approx(@types.erb_to_hz(@types.hz_to_erb(f)), f, 1.0e-9))
     assert_true(approx(@types.mel_to_hz(@types.hz_to_mel(f)), f, 1.0e-9))
+    assert_true(approx(@types.bark_to_hz(@types.hz_to_bark(f)), f, 1.0e-9))
   }
+  assert_true(@types.hz_to_bark(0.0) == 0.0)
+  assert_true(@types.bark_to_hz(0.0) == 0.0)
+  assert_true(
+    approx(@types.hz_to_bark(650.0), 7.0 * @math.ln(1.0 + 2.0.sqrt()), 1.0e-12),
+  )
 }
 
 ///|
@@ -68,6 +74,8 @@ test "PitchTier value_at and scale conversions" {
   assert_true(erb[0] is Some(_) && erb[2] is None)
   let mel = pt.to_mel()
   assert_true(mel[0] is Some(_) && mel[2] is None)
+  let bark = pt.to_bark()
+  assert_true(bark[0] is Some(_) && bark[2] is None)
 }
 
 ///|

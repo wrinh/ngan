@@ -18,18 +18,20 @@ export interface PitchTier {
   frames: PitchFrame[];
 }
 
-/** Options mirroring Praat `To Pitch (ac/cc)...`. */
+/** Options mirroring Praat `To Pitch (ac/cc/filtered ac)...`. */
 export interface PitchOptions {
   timeStep?: number;
   pitchFloor?: number;
   pitchCeiling?: number;
   maxCandidates?: number;
+  veryAccurate?: boolean;
+  attenuationAtTop?: number;
   voicingThreshold?: number;
   silenceThreshold?: number;
   octaveCost?: number;
   octaveJumpCost?: number;
   voicedUnvoicedCost?: number;
-  method?: 'ac' | 'cc';
+  method?: 'ac' | 'cc' | 'filtered_ac';
 }
 
 /** Single formant resonance peak (Hz) and bandwidth (Hz). */
@@ -144,6 +146,9 @@ export interface VoiceReport {
   pulses: number[];
   meanPitchHz: number | null;
   meanHnrDb: number | null;
+  fractionLocallyUnvoiced: number;
+  numberOfVoiceBreaks: number;
+  degreeOfVoiceBreaks: number;
   jitter: JitterMetrics;
   shimmer: ShimmerMetrics;
 }
@@ -154,6 +159,111 @@ export interface VoiceReportOptions {
   pitchCeiling?: number;
   maxPeriodFactor?: number;
   maxAmplitudeFactor?: number;
+}
+
+/** Quefrency-major power cepstrogram grid (Praat `PowerCepstrogram`). */
+export interface PowerCepstrogram {
+  t1: number;
+  dt: number;
+  numberOfTimeFrames: number;
+  q1: number;
+  dq: number;
+  numberOfQuefrencyBins: number;
+  maxPower: number;
+  /** Quefrency-major linear cepstral power: `index = qBin * numberOfTimeFrames + frame`. */
+  power: number[];
+}
+
+/** Result of `To PowerCepstrogram...` + `Get CPPS...`. */
+export interface CppsAnalysis {
+  cppsDb: number | null;
+  cepstrogram: PowerCepstrogram | null;
+}
+
+/** Options mirroring Praat `To PowerCepstrogram...` + `Get CPPS...`. */
+export interface CppsOptions {
+  pitchFloor?: number;
+  timeStep?: number;
+  maximumFrequency?: number;
+  preEmphasisFrom?: number;
+  subtractTiltBeforeSmoothing?: boolean;
+  timeAveragingWindow?: number;
+  quefrencyAveragingWindow?: number;
+  peakSearchPitchFloor?: number;
+  peakSearchPitchCeiling?: number;
+  includeCepstrogram?: boolean;
+  maxTimeColumns?: number;
+}
+
+/** Filter-bank spectrogram grid (Mel or Bark) in dB (`index = filter * numberOfTimeFrames + frame`). */
+export interface FilterBankMatrix {
+  scale: 'mel' | 'bark';
+  t1: number;
+  dt: number;
+  numberOfTimeFrames: number;
+  f1: number;
+  df: number;
+  numberOfFilters: number;
+  values: number[];
+}
+
+/** Options mirroring Praat `To MelSpectrogram...` / `To BarkSpectrogram...`. */
+export interface FilterBankSpectrogramOptions {
+  windowLength?: number;
+  timeStep?: number;
+  positionOfFirstFilter?: number;
+  distanceBetweenFilters?: number;
+  maximumFrequency?: number;
+  maxTimeColumns?: number;
+}
+
+/** Single frame of Mel-Frequency Cepstral Coefficients. */
+export interface MfccFrame {
+  time: number;
+  c0: number;
+  coeffs: number[];
+}
+
+/** MFCC analysis result matching Praat `MFCC`. */
+export interface MfccResult {
+  t1: number;
+  dt: number;
+  fminMel: number;
+  fmaxMel: number;
+  frames: MfccFrame[];
+}
+
+/** Options mirroring Praat `To MFCC...`. */
+export interface MfccOptions {
+  numberOfCoefficients?: number;
+  windowLength?: number;
+  timeStep?: number;
+  positionOfFirstFilter?: number;
+  distanceBetweenFilters?: number;
+  maximumFrequency?: number;
+}
+
+/** Pitch control point for TD-PSOLA manipulation. */
+export interface PitchPoint {
+  time: number;
+  frequency: number;
+}
+
+/** Relative duration control point for TD-PSOLA manipulation. */
+export interface DurationPoint {
+  time: number;
+  relativeDuration: number;
+}
+
+/** Options for TD-PSOLA pitch/duration resynthesis (`manipulatePsola`). */
+export interface PsolaOptions {
+  pitchPoints?: PitchPoint[];
+  durationPoints?: DurationPoint[];
+  pitchScale?: number;
+  pitchShiftSemitones?: number;
+  durationFactor?: number;
+  pitchFloor?: number;
+  pitchCeiling?: number;
 }
 
 /** Long-Term Average Spectrum (dB/Hz re 2e-5 Pa). */
@@ -339,6 +449,8 @@ export interface NganWasmExports extends WebAssembly.Exports {
   set_sample(index: number, value: number): void;
   get_sample(index: number): number;
   samples_len(): number;
+  out_samples_len(): number;
+  get_out_sample(index: number): number;
   ring_reset(capacity: number): number;
   ring_push(sample: number): void;
   ring_len(): number;
@@ -363,6 +475,20 @@ export interface NganWasmExports extends WebAssembly.Exports {
     octaveJumpCost: number,
     voicedUnvoicedCost: number,
     useCc: number,
+  ): string;
+  analyze_pitch_filtered_ac_json(
+    fs: number,
+    timeStep: number,
+    pitchFloor: number,
+    pitchCeiling: number,
+    maxCandidates: number,
+    veryAccurate: number,
+    attenuationAtTop: number,
+    voicingThreshold: number,
+    silenceThreshold: number,
+    octaveCost: number,
+    octaveJumpCost: number,
+    voicedUnvoicedCost: number,
   ): string;
   analyze_formants_json(
     fs: number,
@@ -402,6 +528,49 @@ export interface NganWasmExports extends WebAssembly.Exports {
     maxPeriodFactor: number,
     maxAmplitudeFactor: number,
   ): string;
+  analyze_cepstrogram_cpps_json(
+    fs: number,
+    pitchFloor: number,
+    timeStep: number,
+    maximumFrequency: number,
+    preEmphasisFrom: number,
+    subtractTiltBeforeSmoothing: number,
+    timeAveragingWindow: number,
+    quefrencyAveragingWindow: number,
+    peakSearchPitchFloor: number,
+    peakSearchPitchCeiling: number,
+    includeCepstrogram: number,
+    maxTimeColumns: number,
+  ): string;
+  analyze_mfcc_json(
+    fs: number,
+    numberOfCoefficients: number,
+    windowLength: number,
+    timeStep: number,
+    positionOfFirstFilter: number,
+    distanceBetweenFilters: number,
+    maximumFrequency: number,
+  ): string;
+  analyze_filterbank_spectrogram_json(
+    fs: number,
+    useBark: number,
+    windowLength: number,
+    timeStep: number,
+    positionOfFirstFilter: number,
+    distanceBetweenFilters: number,
+    maximumFrequency: number,
+    maxTimeColumns: number,
+  ): string;
+  manipulate_psola(
+    fs: number,
+    pitchPointsCsv: string,
+    durationPointsCsv: string,
+    pitchScale: number,
+    pitchShiftSemitones: number,
+    durationFactor: number,
+    pitchFloor: number,
+    pitchCeiling: number,
+  ): number;
   analyze_spectral_json(
     fs: number,
     bandwidth: number,

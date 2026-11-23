@@ -166,3 +166,27 @@ pub(all) struct ShimmerMetrics {
   apq11 : Double?
   dda : Double?
 }
+
+///|
+/// Voice break and voicing continuity summary matching Praat's Voice Report
+/// (`Fraction of locally unvoiced frames`, `Number of voice breaks`, and
+/// `Degree of voice breaks`).
+pub(all) struct VoiceBreaks {
+  number_of_voice_breaks : Int32
+  degree_of_voice_breaks : Double
+  fraction_locally_unvoiced : Double
+}
+
+///|
+/// Complete Praat-style Voice Report combining glottal pulses, pitch, HNR,
+/// voicing continuity / voice breaks, jitter, and shimmer.
+pub(all) struct VoiceReport {
+  pulses : FixedArray[Double]
+  mean_pitch_hz : Double?
+  mean_hnr_db : Double?
+  fraction_locally_unvoiced : Double
+  number_of_voice_breaks : Int32
+  degree_of_voice_breaks : Double
+  jitter : JitterMetrics
+  shimmer : ShimmerMetrics
+}

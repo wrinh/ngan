@@ -12,10 +12,14 @@
 // - `intensity`          <-> `To Intensity...`
 // - `pitch`              <-> `To Pitch (ac)...`
 // - `pitch_cc`           <-> `To Pitch (cc)...`
+// - `pitch_filtered_ac`  <-> `To Pitch (filtered ac)...`
 // - `harmonicity_ac`     <-> `To Harmonicity (ac)...`
 // - `harmonicity_cc`     <-> `To Harmonicity (cc)...`
 // - `point_process_cc`   <-> `To PointProcess (periodic, cc)...`
-// - `jitter` / `shimmer` <-> `Get jitter (...)` / `Get shimmer (...)`
+// - `jitter` / `shimmer` / `voice_breaks` / `voice_report` <-> Voice Report
+// - `power_cepstrogram` / `cpps` <-> `To PowerCepstrogram...` / `Get CPPS...`
+// - `mel_spectrogram` / `bark_spectrogram` / `mfcc` <-> `To MelSpectrogram...` / `To BarkSpectrogram...` / `To MFCC...`
+// - `to_manipulation` / `resynthesize_psola` <-> `To Manipulation` / TD-PSOLA
 // - `formants`           <-> `To Formant (burg)...`
 // - `track_formants`     <-> `Formant: Track...`
 // - `spectrogram`        <-> `To Spectrogram...`
@@ -37,6 +41,15 @@ pub using @types {
   type PointProcess,
   type JitterMetrics,
   type ShimmerMetrics,
+  type VoiceBreaks,
+  type VoiceReport,
+  type PowerCepstrogram,
+  type FilterBankMatrix,
+  type MfccFrame,
+  type Mfcc,
+  type PitchPoint,
+  type DurationPoint,
+  type Manipulation,
   type Ltas,
   type SpectralFeatureTier,
   type SpectralTiltFrame,
@@ -56,6 +69,8 @@ pub using @types {
   erb_to_hz,
   hz_to_mel,
   mel_to_hz,
+  hz_to_bark,
+  bark_to_hz,
 }
 
 ///|
@@ -66,12 +81,24 @@ pub using @analysis {
   intensity,
   pitch,
   pitch_cc,
+  pitch_filtered_ac,
   harmonicity_ac,
   harmonicity_cc,
   point_process_cc,
   sound_and_pitch_to_point_process_cc,
   jitter,
   shimmer,
+  voice_breaks,
+  voice_report,
+  power_cepstrogram,
+  cpps,
+  mel_spectrogram,
+  bark_spectrogram,
+  mel_spectrogram_to_mfcc,
+  mfcc,
+  to_manipulation,
+  resynthesize_manipulation,
+  resynthesize_psola,
   formants,
   track_formants,
   spectrogram,
@@ -158,6 +185,44 @@ pub fn analyze_pitch_cc(
   pitch_ceiling : Double,
 ) -> @types.PitchTier {
   @analysis.pitch_cc(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
+}
+
+///|
+/// Praat 6.4+ `To Pitch (filtered ac)...` with defaults for everything
+/// except the pitch range (defaults 50 / 800 Hz).
+pub fn analyze_pitch_filtered_ac(
+  samples : FixedArray[Double],
+  sample_rate : Double,
+  pitch_floor : Double,
+  pitch_ceiling : Double,
+) -> @types.PitchTier {
+  @analysis.pitch_filtered_ac(
+    samples,
+    sample_rate~,
+    pitch_floor~,
+    pitch_ceiling~,
+  )
+}
+
+///|
+/// Compute Praat `To PowerCepstrogram...` + `Get CPPS...` with defaults.
+pub fn analyze_cpps(
+  samples : FixedArray[Double],
+  sample_rate : Double,
+) -> Double? {
+  let pc = @analysis.power_cepstrogram(samples, sample_rate~)
+  @analysis.cpps(pc)
+}
+
+///|
+/// Praat `To MFCC...` with defaults for everything except
+/// `number_of_coefficients` (default 12).
+pub fn analyze_mfcc(
+  samples : FixedArray[Double],
+  sample_rate : Double,
+  number_of_coefficients : Int32,
+) -> @types.Mfcc {
+  @analysis.mfcc(samples, sample_rate~, number_of_coefficients~)
 }
 
 ///|

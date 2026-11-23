@@ -6,7 +6,11 @@ import {
 }
 
 // Values
+pub fn bark_to_hz(Double) -> Double
+
 pub fn erb_to_hz(Double) -> Double
+
+pub fn hz_to_bark(Double) -> Double
 
 pub fn hz_to_erb(Double) -> Double
 
@@ -31,6 +35,22 @@ pub(all) struct AcousticAnalysisResult {
   pitch_frames : Array[PitchFrame]
   formant_frames : Array[FormantFrame]
 }
+
+pub(all) struct DurationPoint {
+  time : Double
+  relative_duration : Double
+}
+
+pub(all) struct FilterBankMatrix {
+  t1 : Double
+  dt : Double
+  number_of_time_frames : Int32
+  f1 : Double
+  df : Double
+  number_of_filters : Int32
+  values : FixedArray[Double]
+}
+pub fn FilterBankMatrix::value_at(Self, Int32, Int32) -> Double?
 
 pub(all) struct FormantFrame {
   time : Double
@@ -94,10 +114,38 @@ pub fn Ltas::mean(Self, fmin? : Double, fmax? : Double, energy? : Bool) -> Doubl
 pub fn Ltas::slope(Self, fmin_low? : Double, fmax_low? : Double, fmin_high? : Double, fmax_high? : Double, energy? : Bool) -> Double?
 pub fn Ltas::value_at(Self, Double) -> Double?
 
+pub(all) struct Manipulation {
+  sample_rate : Double
+  tmin : Double
+  tmax : Double
+  pulses : PointProcess
+  pitch_points : Array[PitchPoint]
+  duration_points : Array[DurationPoint]
+}
+
+pub(all) struct Mfcc {
+  t1 : Double
+  dt : Double
+  fmin_mel : Double
+  fmax_mel : Double
+  frames : Array[MfccFrame]
+}
+
+pub(all) struct MfccFrame {
+  time : Double
+  c0 : Double
+  coeffs : FixedArray[Double]
+}
+
 pub(all) struct PitchFrame {
   time : Double
   frequency : Double?
   strength : Double
+}
+
+pub(all) struct PitchPoint {
+  time : Double
+  frequency : Double
 }
 
 pub(all) struct PitchTier {
@@ -106,6 +154,7 @@ pub(all) struct PitchTier {
   frames : Array[PitchFrame]
 }
 pub fn PitchTier::mean(Self, tmin? : Double, tmax? : Double) -> Double?
+pub fn PitchTier::to_bark(Self) -> Array[Double?]
 pub fn PitchTier::to_erb(Self) -> Array[Double?]
 pub fn PitchTier::to_mel(Self) -> Array[Double?]
 pub fn PitchTier::to_semitones(Self, reference_hz? : Double) -> Array[Double?]
@@ -126,6 +175,18 @@ pub(all) struct PointTier {
   xmax : Double
   points : Array[TextPoint]
 }
+
+pub(all) struct PowerCepstrogram {
+  t1 : Double
+  dt : Double
+  number_of_time_frames : Int32
+  q1 : Double
+  dq : Double
+  number_of_quefrency_bins : Int32
+  power : FixedArray[Double]
+}
+pub fn PowerCepstrogram::db_at(Self, t~ : Double, q~ : Double) -> Double?
+pub fn PowerCepstrogram::power_at(Self, t~ : Double, q~ : Double) -> Double?
 
 #derive(Eq, @debug.Debug)
 pub(all) struct SegmentSummary {
@@ -239,6 +300,23 @@ pub fn TextInterval::midpoint(Self) -> Double
 pub(all) struct TextPoint {
   time : Double
   mark : String
+}
+
+pub(all) struct VoiceBreaks {
+  number_of_voice_breaks : Int32
+  degree_of_voice_breaks : Double
+  fraction_locally_unvoiced : Double
+}
+
+pub(all) struct VoiceReport {
+  pulses : FixedArray[Double]
+  mean_pitch_hz : Double?
+  mean_hnr_db : Double?
+  fraction_locally_unvoiced : Double
+  number_of_voice_breaks : Int32
+  degree_of_voice_breaks : Double
+  jitter : JitterMetrics
+  shimmer : ShimmerMetrics
 }
 
 // Type aliases

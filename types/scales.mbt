@@ -71,6 +71,30 @@ pub fn mel_to_hz(mel : Double) -> Double {
 }
 
 ///|
+/// Convert frequency in Hz to Praat's Bark scale (`NUMhertzToBark`):
+/// `7 * ln(hz / 650 + sqrt(1 + (hz / 650)^2))`.
+pub fn hz_to_bark(hz : Double) -> Double {
+  if hz < 0.0 {
+    0.0
+  } else {
+    let r = hz / 650.0
+    7.0 * @math.ln(r + (1.0 + r * r).sqrt())
+  }
+}
+
+///|
+/// Convert Praat's Bark scale value back to frequency in Hz
+/// (`NUMbarkToHertz`): `325 * (exp(bark / 7) - exp(-bark / 7))`.
+pub fn bark_to_hz(bark : Double) -> Double {
+  if bark < 0.0 {
+    0.0
+  } else {
+    let e = @math.exp(bark / 7.0)
+    325.0 * (e - 1.0 / e)
+  }
+}
+
+///|
 /// Interpolate pitch frequency (Hz) at time `t` (matching Praat's
 /// `Pitch_getValueAtTime` linear interpolation between adjacent voiced
 /// frames). Returns `None` outside the domain or in unvoiced intervals.
@@ -166,6 +190,19 @@ pub fn PitchTier::to_mel(self : PitchTier) -> Array[Double?] {
   for i, fr in self.frames {
     if fr.frequency is Some(f) {
       out[i] = Some(hz_to_mel(f))
+    }
+  }
+  out
+}
+
+///|
+/// Convert every voiced frame of `PitchTier` to Praat Bark, preserving
+/// `None` for unvoiced frames.
+pub fn PitchTier::to_bark(self : PitchTier) -> Array[Double?] {
+  let out : Array[Double?] = Array::make(self.frames.length(), None)
+  for i, fr in self.frames {
+    if fr.frequency is Some(f) {
+      out[i] = Some(hz_to_bark(f))
     }
   }
   out

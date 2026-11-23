@@ -185,3 +185,36 @@ test "point_process_cc jitter and shimmer on clean and AM sines" {
   assert_true(j_sil.local_rel is None)
   assert_true(s_sil.local_rel is None)
 }
+
+///|
+test "voice_breaks and voice_report measure unvoiced fraction and breaks" {
+  let fs = 16000.0
+  let n = 16000
+  // Continuous 200 Hz sine: 0 voice breaks, low unvoiced fraction.
+  let clean = sine_fa(n, fs, 200.0, 1.0, 0.0)
+  let vr_clean = voice_report(clean, sample_rate=fs)
+  assert_eq(vr_clean.number_of_voice_breaks, 0)
+  assert_true(vr_clean.fraction_locally_unvoiced < 0.05)
+  assert_true(vr_clean.degree_of_voice_breaks < 0.1)
+  assert_true(vr_clean.mean_pitch_hz is Some(_))
+  assert_true(vr_clean.mean_hnr_db is Some(_))
+
+  // Insert a 200 ms silent break in the middle ([0.4 s, 0.6 s]).
+  let broken : FixedArray[Double] = FixedArray::make(n, 0.0)
+  for i in 0..<n {
+    let t = i.to_double() / fs
+    if t < 0.4 || t >= 0.6 {
+      broken[i] = @math.sin(2.0 * @math.PI * 200.0 * t)
+    }
+  }
+  let vr_broken = voice_report(broken, sample_rate=fs)
+  assert_eq(vr_broken.number_of_voice_breaks, 1)
+  assert_true(
+    vr_broken.fraction_locally_unvoiced > 0.1 &&
+    vr_broken.fraction_locally_unvoiced < 0.45,
+  )
+  assert_true(
+    vr_broken.degree_of_voice_breaks > 0.1 &&
+    vr_broken.degree_of_voice_breaks < 0.45,
+  )
+}

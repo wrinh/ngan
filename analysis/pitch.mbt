@@ -557,3 +557,110 @@ pub fn pitch(
     auto_raise_candidates=true,
   )
 }
+
+///|
+/// Gaussian frequency-domain low-pass filter matching Praat 6.4+
+/// `To Pitch (filtered ac)...`, attenuating spectral magnitude at
+/// `top_frequency` by `attenuation_at_top` (default 0.03):
+/// `gain(f) = attenuation_at_top ^ ((f / top_frequency)^2)`.
+fn lowpass_attenuation_fft(
+  samples : FixedArray[Double],
+  sample_rate : Double,
+  top_frequency : Double,
+  attenuation_at_top : Double,
+) -> FixedArray[Double] {
+  let nx = samples.length()
+  if nx == 0 {
+    return FixedArray::make(0, 0.0)
+  }
+  let out : FixedArray[Double] = FixedArray::make(nx, 0.0)
+  if sample_rate <= 0.0 ||
+    top_frequency <= 0.0 ||
+    attenuation_at_top <= 0.0 ||
+    attenuation_at_top >= 1.0 {
+    for i in 0..<nx {
+      out[i] = samples[i]
+    }
+    return out
+  }
+  let raw_nfft = @dsp.next_pow2(nx)
+  let nfft = if raw_nfft < 2 { 2 } else { raw_nfft }
+  let plan = @dsp.FftPlan::new(nfft)
+  let re : FixedArray[Double] = FixedArray::make(nfft, 0.0)
+  let im : FixedArray[Double] = FixedArray::make(nfft, 0.0)
+  for i in 0..<nx {
+    re[i] = samples[i]
+  }
+  plan.transform(re, im, inverse=false)
+  let df = sample_rate / nfft.to_double()
+  let half = nfft / 2
+  let log_atten = @math.ln(attenuation_at_top)
+  for k in 0..<=half {
+    let f = k.to_double() * df
+    let r = f / top_frequency
+    let gain = @math.exp(log_atten * r * r)
+    re[k] *= gain
+    im[k] *= gain
+    if k > 0 && k < half {
+      re[nfft - k] *= gain
+      im[nfft - k] *= gain
+    }
+  }
+  plan.transform(re, im, inverse=true)
+  for i in 0..<nx {
+    out[i] = re[i]
+  }
+  out
+}
+
+///|
+/// Pitch analysis with the parameters of Praat 6.4+
+/// `To Pitch (filtered ac)...`.
+///
+/// Applies Praat's frequency-domain Gaussian attenuation filter prior
+/// to autocorrelation (`attenuation_at_top` at `pitch_ceiling`), with
+/// Praat 6.4+ default thresholds (`pitch_floor = 50`, `pitch_ceiling =
+/// 800`, `voicing_threshold = 0.50`, `silence_threshold = 0.09`,
+/// `octave_cost = 0.055`, `attenuation_at_top = 0.03`). When
+/// `very_accurate` is `true`, switches to the 6-period Gaussian window.
+pub fn pitch_filtered_ac(
+  samples : FixedArray[Double],
+  sample_rate~ : Double,
+  time_step~ : Double = 0.0,
+  pitch_floor~ : Double = 50.0,
+  pitch_ceiling~ : Double = 800.0,
+  max_candidates~ : Int32 = 15,
+  very_accurate~ : Bool = false,
+  attenuation_at_top~ : Double = 0.03,
+  voicing_threshold~ : Double = 0.50,
+  silence_threshold~ : Double = 0.09,
+  octave_cost~ : Double = 0.055,
+  octave_jump_cost~ : Double = 0.35,
+  voiced_unvoiced_cost~ : Double = 0.14,
+) -> @types.PitchTier {
+  if samples.length() == 0 ||
+    sample_rate <= 0.0 ||
+    pitch_floor <= 0.0 ||
+    pitch_ceiling <= pitch_floor {
+    return { t1: 0.0, dt: 0.0, frames: [], }
+  }
+  let filtered = lowpass_attenuation_fft(
+    samples, sample_rate, pitch_ceiling, attenuation_at_top,
+  )
+  pitch_ac_core(
+    filtered,
+    sample_rate~,
+    time_step~,
+    pitch_floor~,
+    pitch_ceiling~,
+    max_candidates~,
+    voicing_threshold~,
+    silence_threshold~,
+    octave_cost~,
+    octave_jump_cost~,
+    voiced_unvoiced_cost~,
+    periods_per_window=if very_accurate { 6.0 } else { 3.0 },
+    use_gaussian=very_accurate,
+    auto_raise_candidates=true,
+  )
+}

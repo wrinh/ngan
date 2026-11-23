@@ -7,6 +7,7 @@
 ///|
 priv struct WasmState {
   mut samples : FixedArray[Double]
+  mut out_samples : FixedArray[Double]
   mut ring : FixedArray[Double]
   mut ring_head : Int32
   mut ring_count : Int32
@@ -16,6 +17,7 @@ priv struct WasmState {
 ///|
 let state : WasmState = {
   samples: FixedArray::make(0, 0.0),
+  out_samples: FixedArray::make(0, 0.0),
   ring: FixedArray::make(0, 0.0),
   ring_head: 0,
   ring_count: 0,
@@ -124,6 +126,22 @@ pub fn samples_len() -> Int32 {
 }
 
 ///|
+/// Return the length of the synthesized output sample buffer (`out_samples`).
+pub fn out_samples_len() -> Int32 {
+  state.out_samples.length()
+}
+
+///|
+/// Read a single synthesized PCM sample from `state.out_samples` at `index`.
+pub fn get_out_sample(index : Int32) -> Double {
+  if index >= 0 && index < state.out_samples.length() {
+    state.out_samples[index]
+  } else {
+    0.0
+  }
+}
+
+///|
 /// Reset and allocate the streaming ring buffer with `capacity` samples.
 pub fn ring_reset(capacity : Int32) -> Int32 {
   let cap = if capacity > 0 { capacity } else { 0 }
@@ -215,7 +233,23 @@ pub fn analyze_intensity_json(
 }
 
 ///|
-/// Run Praat `To Pitch (ac/cc)...` on the active sample buffer and return JSON.
+fn format_pitch_tier_json(pt : @ngan.PitchTier) -> String {
+  let sb = StringBuilder()
+  sb <+ "{\"t1\": \{fmt_num(pt.t1)}, \"dt\": \{fmt_num(pt.dt)}, \"frames\": ["
+  for i, fr in pt.frames {
+    if i > 0 {
+      sb <+ ", "
+    }
+    sb <+
+      "{\"time\": \{fmt_num(fr.time)}, \"frequency\": \{fmt_opt_double(fr.frequency)}, \"strength\": \{fmt_num(fr.strength)}}"
+  }
+  sb <+ "]}"
+  sb.to_string()
+}
+
+///|
+/// Run Praat `To Pitch (ac/cc/filtered_ac)...` on the active sample buffer
+/// (`use_cc`: 0 = AC, 1 = CC, 2 = Filtered AC) and return JSON.
 pub fn analyze_pitch_json(
   fs : Double,
   time_step : Double,
@@ -229,8 +263,22 @@ pub fn analyze_pitch_json(
   voiced_unvoiced_cost : Double,
   use_cc : Int32,
 ) -> String {
-  let pt = if use_cc != 0 {
+  let pt = if use_cc == 1 {
     @ngan.pitch_cc(
+      state.samples,
+      sample_rate=fs,
+      time_step~,
+      pitch_floor~,
+      pitch_ceiling~,
+      max_candidates~,
+      voicing_threshold~,
+      silence_threshold~,
+      octave_cost~,
+      octave_jump_cost~,
+      voiced_unvoiced_cost~,
+    )
+  } else if use_cc == 2 {
+    @ngan.pitch_filtered_ac(
       state.samples,
       sample_rate=fs,
       time_step~,
@@ -258,17 +306,42 @@ pub fn analyze_pitch_json(
       voiced_unvoiced_cost~,
     )
   }
-  let sb = StringBuilder()
-  sb <+ "{\"t1\": \{fmt_num(pt.t1)}, \"dt\": \{fmt_num(pt.dt)}, \"frames\": ["
-  for i, fr in pt.frames {
-    if i > 0 {
-      sb <+ ", "
-    }
-    sb <+
-      "{\"time\": \{fmt_num(fr.time)}, \"frequency\": \{fmt_opt_double(fr.frequency)}, \"strength\": \{fmt_num(fr.strength)}}"
-  }
-  sb <+ "]}"
-  sb.to_string()
+  format_pitch_tier_json(pt)
+}
+
+///|
+/// Run Praat 6.4+ `To Pitch (filtered ac)...` on the active sample buffer
+/// with full parameter control and return JSON.
+pub fn analyze_pitch_filtered_ac_json(
+  fs : Double,
+  time_step : Double,
+  pitch_floor : Double,
+  pitch_ceiling : Double,
+  max_candidates : Int32,
+  very_accurate : Int32,
+  attenuation_at_top : Double,
+  voicing_threshold : Double,
+  silence_threshold : Double,
+  octave_cost : Double,
+  octave_jump_cost : Double,
+  voiced_unvoiced_cost : Double,
+) -> String {
+  let pt = @ngan.pitch_filtered_ac(
+    state.samples,
+    sample_rate=fs,
+    time_step~,
+    pitch_floor~,
+    pitch_ceiling~,
+    max_candidates~,
+    very_accurate=very_accurate != 0,
+    attenuation_at_top~,
+    voicing_threshold~,
+    silence_threshold~,
+    octave_cost~,
+    octave_jump_cost~,
+    voiced_unvoiced_cost~,
+  )
+  format_pitch_tier_json(pt)
 }
 
 ///|
@@ -432,8 +505,9 @@ pub fn analyze_spectrogram_json(
 }
 
 ///|
-/// Run Praat voice quality perturbation analysis (pulses, HNR, jitter,
-/// shimmer) on the active sample buffer and return JSON.
+/// Run Praat voice quality perturbation analysis (pulses, HNR, unvoiced
+/// fraction, voice breaks, jitter, shimmer) on the active sample buffer and
+/// return JSON.
 pub fn analyze_voice_report_json(
   fs : Double,
   pitch_floor : Double,
@@ -441,46 +515,307 @@ pub fn analyze_voice_report_json(
   max_period_factor : Double,
   max_amplitude_factor : Double,
 ) -> String {
-  let pt = @ngan.pitch(
+  let vr = @ngan.voice_report(
     state.samples,
     sample_rate=fs,
     pitch_floor~,
     pitch_ceiling~,
-  )
-  let pp = @ngan.sound_and_pitch_to_point_process_cc(
-    state.samples,
-    sample_rate=fs,
-    pitch=pt,
-  )
-  let jit = @ngan.jitter(pp, max_period_factor~)
-  let shim = @ngan.shimmer(
-    state.samples,
-    sample_rate=fs,
-    pp~,
     max_period_factor~,
     max_amplitude_factor~,
   )
-  let hnr = @ngan.harmonicity_ac(
-    state.samples,
-    sample_rate=fs,
-    min_pitch=pitch_floor,
-  )
   let sb = StringBuilder()
   sb <+ "{\"pulses\": ["
-  for i in 0..<pp.points.length() {
+  for i in 0..<vr.pulses.length() {
     if i > 0 {
       sb <+ ", "
     }
-    sb.write_string(fmt_num(pp.points[i]))
+    sb.write_string(fmt_num(vr.pulses[i]))
   }
-  sb <+ "], \"meanPitchHz\": \{fmt_opt_double(pt.mean())}"
-  sb <+ ", \"meanHnrDb\": \{fmt_opt_double(hnr.mean())}"
+  sb <+ "], \"meanPitchHz\": \{fmt_opt_double(vr.mean_pitch_hz)}"
+  sb <+ ", \"meanHnrDb\": \{fmt_opt_double(vr.mean_hnr_db)}"
   sb <+
-    ", \"jitter\": {\"localRel\": \{fmt_opt_double(jit.local_rel)}, \"localAbs\": \{fmt_opt_double(jit.local_abs)}, \"rap\": \{fmt_opt_double(jit.rap)}, \"ppq5\": \{fmt_opt_double(jit.ppq5)}, \"ddp\": \{fmt_opt_double(jit.ddp)}}"
+    ", \"fractionLocallyUnvoiced\": \{fmt_num(vr.fraction_locally_unvoiced)}"
+  sb <+ ", \"numberOfVoiceBreaks\": \{vr.number_of_voice_breaks}"
+  sb <+ ", \"degreeOfVoiceBreaks\": \{fmt_num(vr.degree_of_voice_breaks)}"
   sb <+
-    ", \"shimmer\": {\"localRel\": \{fmt_opt_double(shim.local_rel)}, \"localDb\": \{fmt_opt_double(shim.local_db)}, \"apq3\": \{fmt_opt_double(shim.apq3)}, \"apq5\": \{fmt_opt_double(shim.apq5)}, \"apq11\": \{fmt_opt_double(shim.apq11)}, \"dda\": \{fmt_opt_double(shim.dda)}}"
+    ", \"jitter\": {\"localRel\": \{fmt_opt_double(vr.jitter.local_rel)}, \"localAbs\": \{fmt_opt_double(vr.jitter.local_abs)}, \"rap\": \{fmt_opt_double(vr.jitter.rap)}, \"ppq5\": \{fmt_opt_double(vr.jitter.ppq5)}, \"ddp\": \{fmt_opt_double(vr.jitter.ddp)}}"
+  sb <+
+    ", \"shimmer\": {\"localRel\": \{fmt_opt_double(vr.shimmer.local_rel)}, \"localDb\": \{fmt_opt_double(vr.shimmer.local_db)}, \"apq3\": \{fmt_opt_double(vr.shimmer.apq3)}, \"apq5\": \{fmt_opt_double(vr.shimmer.apq5)}, \"apq11\": \{fmt_opt_double(vr.shimmer.apq11)}, \"dda\": \{fmt_opt_double(vr.shimmer.dda)}}"
   sb <+ "}"
   sb.to_string()
+}
+
+///|
+/// Run Praat `To PowerCepstrogram...` and `Get CPPS...` on the active
+/// sample buffer and return JSON.
+pub fn analyze_cepstrogram_cpps_json(
+  fs : Double,
+  pitch_floor : Double,
+  time_step : Double,
+  maximum_frequency : Double,
+  pre_emphasis_from : Double,
+  subtract_tilt_before_smoothing : Int32,
+  time_averaging_window : Double,
+  quefrency_averaging_window : Double,
+  peak_search_pitch_floor : Double,
+  peak_search_pitch_ceiling : Double,
+  include_cepstrogram : Int32,
+  max_time_columns : Int32,
+) -> String {
+  let pc = @ngan.power_cepstrogram(
+    state.samples,
+    sample_rate=fs,
+    pitch_floor~,
+    time_step~,
+    maximum_frequency~,
+    pre_emphasis_from~,
+  )
+  let cpps_val = @ngan.cpps(
+    pc,
+    subtract_tilt_before_smoothing=subtract_tilt_before_smoothing != 0,
+    time_averaging_window~,
+    quefrency_averaging_window~,
+    peak_search_pitch_floor~,
+    peak_search_pitch_ceiling~,
+  )
+  let sb = StringBuilder()
+  sb <+ "{\"cppsDb\": \{fmt_opt_double(cpps_val)}, \"cepstrogram\": "
+  if include_cepstrogram != 0 {
+    let nt = pc.number_of_time_frames
+    let nq = pc.number_of_quefrency_bins
+    let mut stride = 1
+    if max_time_columns > 0 {
+      while nt > max_time_columns * stride {
+        stride *= 2
+      }
+    }
+    let nt_out = if nt > 0 { (nt - 1) / stride + 1 } else { 0 }
+    let total_out = nq * nt_out
+    let out_power = FixedArray::make(total_out, 0.0)
+    let mut max_p = 0.0
+    for q in 0..<nq {
+      for col in 0..<nt_out {
+        let f_start = col * stride
+        let f_end = if f_start + stride < nt { f_start + stride } else { nt }
+        let span = (f_end - f_start).to_double()
+        let mut sum = 0.0
+        for fr in f_start..<f_end {
+          sum += pc.power[q * nt + fr]
+        }
+        let p = if span > 0.0 { sum / span } else { 0.0 }
+        out_power[q * nt_out + col] = p
+        if p > max_p {
+          max_p = p
+        }
+      }
+    }
+    sb <+
+      "{\"t1\": \{fmt_num(pc.t1)}, \"dt\": \{fmt_num(pc.dt * stride.to_double())}, \"numberOfTimeFrames\": \{nt_out}"
+    sb <+
+      ", \"q1\": \{fmt_num(pc.q1)}, \"dq\": \{fmt_num(pc.dq)}, \"numberOfQuefrencyBins\": \{nq}"
+    sb <+ ", \"maxPower\": \{fmt_num(max_p)}, \"power\": ["
+    for i in 0..<total_out {
+      if i > 0 {
+        sb <+ ", "
+      }
+      sb.write_string(fmt_num(out_power[i]))
+    }
+    sb <+ "]}"
+  } else {
+    sb <+ "null"
+  }
+  sb <+ "}"
+  sb.to_string()
+}
+
+///|
+/// Run Praat `To MFCC...` on the active sample buffer and return JSON.
+pub fn analyze_mfcc_json(
+  fs : Double,
+  number_of_coefficients : Int32,
+  window_length : Double,
+  time_step : Double,
+  position_of_first_filter : Double,
+  distance_between_filters : Double,
+  maximum_frequency : Double,
+) -> String {
+  let m = @ngan.mfcc(
+    state.samples,
+    sample_rate=fs,
+    number_of_coefficients~,
+    window_length~,
+    time_step~,
+    position_of_first_filter~,
+    distance_between_filters~,
+    maximum_frequency~,
+  )
+  let sb = StringBuilder()
+  sb <+
+    "{\"t1\": \{fmt_num(m.t1)}, \"dt\": \{fmt_num(m.dt)}, \"fminMel\": \{fmt_num(m.fmin_mel)}, \"fmaxMel\": \{fmt_num(m.fmax_mel)}, \"frames\": ["
+  for i, fr in m.frames {
+    if i > 0 {
+      sb <+ ", "
+    }
+    sb <+
+      "{\"time\": \{fmt_num(fr.time)}, \"c0\": \{fmt_num(fr.c0)}, \"coeffs\": ["
+    for j in 0..<fr.coeffs.length() {
+      if j > 0 {
+        sb <+ ", "
+      }
+      sb.write_string(fmt_num(fr.coeffs[j]))
+    }
+    sb <+ "]}"
+  }
+  sb <+ "]}"
+  sb.to_string()
+}
+
+///|
+/// Run Praat `To MelSpectrogram...` (`use_bark == 0`) or
+/// `To BarkSpectrogram...` (`use_bark != 0`) on the active sample buffer,
+/// optionally stride-averaging linear power along time when
+/// `max_time_columns > 0`, and return JSON.
+pub fn analyze_filterbank_spectrogram_json(
+  fs : Double,
+  use_bark : Int32,
+  window_length : Double,
+  time_step : Double,
+  position_of_first_filter : Double,
+  distance_between_filters : Double,
+  maximum_frequency : Double,
+  max_time_columns : Int32,
+) -> String {
+  let fb = if use_bark != 0 {
+    @ngan.bark_spectrogram(
+      state.samples,
+      sample_rate=fs,
+      window_length~,
+      time_step~,
+      position_of_first_filter~,
+      distance_between_filters~,
+      maximum_frequency~,
+    )
+  } else {
+    @ngan.mel_spectrogram(
+      state.samples,
+      sample_rate=fs,
+      window_length~,
+      time_step~,
+      position_of_first_filter~,
+      distance_between_filters~,
+      maximum_frequency~,
+    )
+  }
+  let nt = fb.number_of_time_frames
+  let nf = fb.number_of_filters
+  let mut stride = 1
+  if max_time_columns > 0 {
+    while nt > max_time_columns * stride {
+      stride *= 2
+    }
+  }
+  let nt_out = if nt > 0 { (nt - 1) / stride + 1 } else { 0 }
+  let total_out = nf * nt_out
+  let out_vals = FixedArray::make(total_out, -300.0)
+  for b in 0..<nf {
+    for col in 0..<nt_out {
+      let f_start = col * stride
+      let f_end = if f_start + stride < nt { f_start + stride } else { nt }
+      let span = (f_end - f_start).to_double()
+      if stride == 1 {
+        out_vals[b * nt_out + col] = fb.values[b * nt + f_start]
+      } else {
+        let mut sum_e = 0.0
+        for fr in f_start..<f_end {
+          sum_e += @math.pow(10.0, fb.values[b * nt + fr] / 10.0)
+        }
+        let mean_e = if span > 0.0 { sum_e / span } else { 0.0 }
+        out_vals[b * nt_out + col] = if mean_e <= 1.0e-30 {
+          -300.0
+        } else {
+          10.0 * @math.log10(mean_e)
+        }
+      }
+    }
+  }
+  let scale_name = if use_bark != 0 { "bark" } else { "mel" }
+  let sb = StringBuilder()
+  sb <+
+    "{\"scale\": \"\{scale_name}\", \"t1\": \{fmt_num(fb.t1)}, \"dt\": \{fmt_num(fb.dt * stride.to_double())}, \"numberOfTimeFrames\": \{nt_out}"
+  sb <+
+    ", \"f1\": \{fmt_num(fb.f1)}, \"df\": \{fmt_num(fb.df)}, \"numberOfFilters\": \{nf}, \"values\": ["
+  for i in 0..<total_out {
+    if i > 0 {
+      sb <+ ", "
+    }
+    sb.write_string(fmt_num(out_vals[i]))
+  }
+  sb <+ "]}"
+  sb.to_string()
+}
+
+///|
+fn parse_time_value_pairs(csv : String) -> Array[(Double, Double)] {
+  let out : Array[(Double, Double)] = []
+  for tok in csv.split(" ") {
+    if tok.length() == 0 {
+      continue
+    }
+    let mut sep = -1
+    for i, ch in tok {
+      if ch == ':' {
+        sep = i
+        break
+      }
+    }
+    if sep > 0 && sep + 1 < tok.length() {
+      let left = tok[:sep]
+      let right = tok[sep + 1:]
+      let t = @string.parse_double(left) catch { _ => continue }
+      let v = @string.parse_double(right) catch { _ => continue }
+      out.push((t, v))
+    }
+  }
+  out
+}
+
+///|
+/// Run TD-PSOLA pitch/duration manipulation on `state.samples`, store the
+/// resynthesized audio in `state.out_samples`, and return its sample count.
+/// `pitch_points_csv` and `duration_points_csv` are space-separated
+/// `"time:value"` pairs (e.g. `"0.0:200 0.5:260"`).
+pub fn manipulate_psola(
+  fs : Double,
+  pitch_points_csv : String,
+  duration_points_csv : String,
+  pitch_scale : Double,
+  pitch_shift_semitones : Double,
+  duration_factor : Double,
+  pitch_floor : Double,
+  pitch_ceiling : Double,
+) -> Int32 {
+  let p_pairs = parse_time_value_pairs(pitch_points_csv)
+  let pitch_points : Array[@ngan.PitchPoint] = []
+  for pair in p_pairs {
+    pitch_points.push({ time: pair.0, frequency: pair.1, })
+  }
+  let d_pairs = parse_time_value_pairs(duration_points_csv)
+  let duration_points : Array[@ngan.DurationPoint] = []
+  for pair in d_pairs {
+    duration_points.push({ time: pair.0, relative_duration: pair.1, })
+  }
+  state.out_samples = @ngan.resynthesize_psola(
+    state.samples,
+    sample_rate=fs,
+    pitch_points=pitch_points[:],
+    duration_points=duration_points[:],
+    pitch_scale~,
+    pitch_shift_semitones~,
+    duration_factor~,
+    pitch_floor~,
+    pitch_ceiling~,
+  )
+  state.out_samples.length()
 }
 
 ///|

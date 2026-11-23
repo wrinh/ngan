@@ -6,18 +6,25 @@ import { NganStreamSession, startMicrophoneStream } from './stream.js';
 import type {
   AcousticAnalysis,
   AnalyzeAllOptions,
+  CppsAnalysis,
+  CppsOptions,
+  FilterBankMatrix,
+  FilterBankSpectrogramOptions,
   FormantOptions,
   FormantTier,
   HarmonicityOptions,
   HarmonicityTier,
   IntensityOptions,
   IntensityTier,
+  MfccOptions,
+  MfccResult,
   MicrophoneStreamHandle,
   MicrophoneStreamOptions,
   NganInitOptions,
   NganWasmExports,
   PitchOptions,
   PitchTier,
+  PsolaOptions,
   SampleArray,
   SegmentSummary,
   SpectralAnalysis,
@@ -89,11 +96,28 @@ export class NganEngine {
     return this.analyzeActiveIntensity(sampleRate, options);
   }
 
-  /** Praat `To Pitch (ac/cc)...` on the active WASM sample buffer. */
+  /** Praat `To Pitch (ac/cc/filtered ac)...` on the active WASM sample buffer. */
   analyzeActivePitch(
     sampleRate: number,
     options: PitchOptions = {},
   ): PitchTier {
+    if (options.method === 'filtered_ac') {
+      const json = this.exports.analyze_pitch_filtered_ac_json(
+        sampleRate,
+        options.timeStep ?? 0.0,
+        options.pitchFloor ?? 50.0,
+        options.pitchCeiling ?? 800.0,
+        options.maxCandidates ?? 15,
+        options.veryAccurate ? 1 : 0,
+        options.attenuationAtTop ?? 0.03,
+        options.voicingThreshold ?? 0.5,
+        options.silenceThreshold ?? 0.09,
+        options.octaveCost ?? 0.055,
+        options.octaveJumpCost ?? 0.35,
+        options.voicedUnvoicedCost ?? 0.14,
+      );
+      return JSON.parse(json) as PitchTier;
+    }
     const json = this.exports.analyze_pitch_json(
       sampleRate,
       options.timeStep ?? 0.0,
@@ -205,7 +229,7 @@ export class NganEngine {
     return this.analyzeActiveSpectrogram(sampleRate, options);
   }
 
-  /** Praat glottal pulse, jitter, shimmer, and mean HNR voice report. */
+  /** Praat glottal pulse, jitter, shimmer, voice breaks, and mean HNR voice report. */
   analyzeVoiceReport(
     samples: SampleArray,
     sampleRate: number,
@@ -220,6 +244,119 @@ export class NganEngine {
       options.maxAmplitudeFactor ?? 1.6,
     );
     return JSON.parse(json) as VoiceReport;
+  }
+
+  /** Praat `To PowerCepstrogram...` + `Get CPPS...`. */
+  analyzeCpps(
+    samples: SampleArray,
+    sampleRate: number,
+    options: CppsOptions = {},
+  ): CppsAnalysis {
+    this.writeSamples(samples);
+    const json = this.exports.analyze_cepstrogram_cpps_json(
+      sampleRate,
+      options.pitchFloor ?? 60.0,
+      options.timeStep ?? 0.002,
+      options.maximumFrequency ?? 5000.0,
+      options.preEmphasisFrom ?? 50.0,
+      options.subtractTiltBeforeSmoothing === false ? 0 : 1,
+      options.timeAveragingWindow ?? 0.01,
+      options.quefrencyAveragingWindow ?? 0.001,
+      options.peakSearchPitchFloor ?? 60.0,
+      options.peakSearchPitchCeiling ?? 330.0,
+      options.includeCepstrogram ? 1 : 0,
+      options.maxTimeColumns ?? 0,
+    );
+    return JSON.parse(json) as CppsAnalysis;
+  }
+
+  /** Praat `To MFCC...`. */
+  analyzeMfcc(
+    samples: SampleArray,
+    sampleRate: number,
+    options: MfccOptions = {},
+  ): MfccResult {
+    this.writeSamples(samples);
+    const json = this.exports.analyze_mfcc_json(
+      sampleRate,
+      options.numberOfCoefficients ?? 12,
+      options.windowLength ?? 0.015,
+      options.timeStep ?? 0.005,
+      options.positionOfFirstFilter ?? 100.0,
+      options.distanceBetweenFilters ?? 100.0,
+      options.maximumFrequency ?? 0.0,
+    );
+    return JSON.parse(json) as MfccResult;
+  }
+
+  /** Praat `To MelSpectrogram...`. */
+  analyzeMelSpectrogram(
+    samples: SampleArray,
+    sampleRate: number,
+    options: FilterBankSpectrogramOptions = {},
+  ): FilterBankMatrix {
+    this.writeSamples(samples);
+    const json = this.exports.analyze_filterbank_spectrogram_json(
+      sampleRate,
+      0,
+      options.windowLength ?? 0.015,
+      options.timeStep ?? 0.005,
+      options.positionOfFirstFilter ?? 100.0,
+      options.distanceBetweenFilters ?? 100.0,
+      options.maximumFrequency ?? 0.0,
+      options.maxTimeColumns ?? 0,
+    );
+    return JSON.parse(json) as FilterBankMatrix;
+  }
+
+  /** Praat `To BarkSpectrogram...`. */
+  analyzeBarkSpectrogram(
+    samples: SampleArray,
+    sampleRate: number,
+    options: FilterBankSpectrogramOptions = {},
+  ): FilterBankMatrix {
+    this.writeSamples(samples);
+    const json = this.exports.analyze_filterbank_spectrogram_json(
+      sampleRate,
+      1,
+      options.windowLength ?? 0.015,
+      options.timeStep ?? 0.005,
+      options.positionOfFirstFilter ?? 1.0,
+      options.distanceBetweenFilters ?? 1.0,
+      options.maximumFrequency ?? 0.0,
+      options.maxTimeColumns ?? 0,
+    );
+    return JSON.parse(json) as FilterBankMatrix;
+  }
+
+  /** Praat TD-PSOLA pitch & duration manipulation (`To Manipulation` + OLA resynthesis). */
+  manipulatePsola(
+    samples: SampleArray,
+    sampleRate: number,
+    options: PsolaOptions = {},
+  ): Float64Array {
+    this.writeSamples(samples);
+    const pitchCsv = (options.pitchPoints ?? [])
+      .map((p) => `${p.time}:${p.frequency}`)
+      .join(' ');
+    const durCsv = (options.durationPoints ?? [])
+      .map((d) => `${d.time}:${d.relativeDuration}`)
+      .join(' ');
+    const outLen = this.exports.manipulate_psola(
+      sampleRate,
+      pitchCsv,
+      durCsv,
+      options.pitchScale ?? 1.0,
+      options.pitchShiftSemitones ?? 0.0,
+      options.durationFactor ?? 1.0,
+      options.pitchFloor ?? 75.0,
+      options.pitchCeiling ?? 600.0,
+    );
+    const out = new Float64Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      out[i] = this.exports.get_out_sample(i);
+    }
+    return out;
   }
 
   /** Praat `To Ltas...` and `Spectrum: Get centre of gravity...`. */
