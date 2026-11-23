@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 ngan contributors
 
+import {
+  analyzeLongAudio as runLongAudio,
+  streamLongAudio as runStreamLongAudio,
+} from './chunked.js';
 import { loadNganWasm } from './loader.js';
 import { NganStreamSession, startMicrophoneStream } from './stream.js';
 import type {
   AcousticAnalysis,
   AnalyzeAllOptions,
+  AudioChunkAnalysisResult,
   CppsAnalysis,
   CppsOptions,
   FilterBankMatrix,
@@ -16,6 +21,8 @@ import type {
   HarmonicityTier,
   IntensityOptions,
   IntensityTier,
+  LongAudioAnalysisOptions,
+  LongAudioAnalysisResult,
   MfccOptions,
   MfccResult,
   MicrophoneStreamHandle,
@@ -48,6 +55,14 @@ export {
   getWorkletProcessorSource,
   createWorkletModuleUrl,
 } from './worklet-processor.js';
+export {
+  planAudioChunks,
+  analyzeAudioChunk,
+  mergeChunkAnalyses,
+  streamLongAudio,
+  analyzeLongAudio,
+} from './chunked.js';
+export { NganWorkerClient, createNganWorker } from './worker.js';
 
 /**
  * High-level TypeScript wrapper around the `ngan` WebAssembly GC engine.
@@ -270,13 +285,11 @@ export class NganEngine {
     return JSON.parse(json) as CppsAnalysis;
   }
 
-  /** Praat `To MFCC...`. */
-  analyzeMfcc(
-    samples: SampleArray,
+  /** Praat `To MFCC...` on the active WASM sample buffer. */
+  analyzeActiveMfcc(
     sampleRate: number,
     options: MfccOptions = {},
   ): MfccResult {
-    this.writeSamples(samples);
     const json = this.exports.analyze_mfcc_json(
       sampleRate,
       options.numberOfCoefficients ?? 12,
@@ -289,13 +302,21 @@ export class NganEngine {
     return JSON.parse(json) as MfccResult;
   }
 
-  /** Praat `To MelSpectrogram...`. */
-  analyzeMelSpectrogram(
+  /** Praat `To MFCC...`. */
+  analyzeMfcc(
     samples: SampleArray,
+    sampleRate: number,
+    options: MfccOptions = {},
+  ): MfccResult {
+    this.writeSamples(samples);
+    return this.analyzeActiveMfcc(sampleRate, options);
+  }
+
+  /** Praat `To MelSpectrogram...` on the active WASM sample buffer. */
+  analyzeActiveMelSpectrogram(
     sampleRate: number,
     options: FilterBankSpectrogramOptions = {},
   ): FilterBankMatrix {
-    this.writeSamples(samples);
     const json = this.exports.analyze_filterbank_spectrogram_json(
       sampleRate,
       0,
@@ -309,13 +330,21 @@ export class NganEngine {
     return JSON.parse(json) as FilterBankMatrix;
   }
 
-  /** Praat `To BarkSpectrogram...`. */
-  analyzeBarkSpectrogram(
+  /** Praat `To MelSpectrogram...`. */
+  analyzeMelSpectrogram(
     samples: SampleArray,
     sampleRate: number,
     options: FilterBankSpectrogramOptions = {},
   ): FilterBankMatrix {
     this.writeSamples(samples);
+    return this.analyzeActiveMelSpectrogram(sampleRate, options);
+  }
+
+  /** Praat `To BarkSpectrogram...` on the active WASM sample buffer. */
+  analyzeActiveBarkSpectrogram(
+    sampleRate: number,
+    options: FilterBankSpectrogramOptions = {},
+  ): FilterBankMatrix {
     const json = this.exports.analyze_filterbank_spectrogram_json(
       sampleRate,
       1,
@@ -327,6 +356,16 @@ export class NganEngine {
       options.maxTimeColumns ?? 0,
     );
     return JSON.parse(json) as FilterBankMatrix;
+  }
+
+  /** Praat `To BarkSpectrogram...`. */
+  analyzeBarkSpectrogram(
+    samples: SampleArray,
+    sampleRate: number,
+    options: FilterBankSpectrogramOptions = {},
+  ): FilterBankMatrix {
+    this.writeSamples(samples);
+    return this.analyzeActiveBarkSpectrogram(sampleRate, options);
   }
 
   /** Praat TD-PSOLA pitch & duration manipulation (`To Manipulation` + OLA resynthesis). */
@@ -454,6 +493,24 @@ export class NganEngine {
     options: MicrophoneStreamOptions = {},
   ): Promise<MicrophoneStreamHandle> {
     return startMicrophoneStream(this, options);
+  }
+
+  /** Analyze long audio recordings using overlap-save chunking and progress callbacks. */
+  analyzeLongAudio(
+    samples: SampleArray,
+    sampleRate: number,
+    options: LongAudioAnalysisOptions = {},
+  ): Promise<LongAudioAnalysisResult> {
+    return runLongAudio(this, samples, sampleRate, options);
+  }
+
+  /** Stream overlap-save chunked analyses for long audio as an `AsyncGenerator`. */
+  streamLongAudio(
+    samples: SampleArray,
+    sampleRate: number,
+    options: LongAudioAnalysisOptions = {},
+  ): AsyncGenerator<AudioChunkAnalysisResult, void, unknown> {
+    return runStreamLongAudio(this, samples, sampleRate, options);
   }
 }
 

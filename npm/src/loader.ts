@@ -34,7 +34,7 @@ async function readNodeFileBytes(pathOrUrl: string | URL): Promise<ArrayBuffer> 
   return copy.buffer;
 }
 
-async function resolveWasmBytes(source?: WasmSource): Promise<BufferSource> {
+export async function resolveWasmBytes(source?: WasmSource): Promise<BufferSource> {
   if (source === undefined) {
     const defaultUrl = new URL('./ngan.wasm', import.meta.url);
     if (defaultUrl.protocol === 'file:') {

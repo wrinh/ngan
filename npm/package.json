@@ -1,10 +1,10 @@
 {
   "name": "@wrinh/ngan",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Praat-compatible acoustic analysis engine (intensity, pitch, formants, spectrogram, HNR, jitter/shimmer, TextGrid) compiled from MoonBit to WebAssembly GC, with Web Audio API & AudioWorklet real-time streaming support.",
+  "description": "Praat-compatible acoustic analysis & TD-PSOLA engine (intensity, pitch/filtered-AC, formants, spectrogram/Mel/Bark, MFCC, PowerCepstrogram/CPPS, HNR, jitter/shimmer, voice breaks, TextGrid, Web Worker & chunked long-audio streaming) compiled from MoonBit to WebAssembly GC.",
   "license": "GPL-3.0-or-later",
   "repository": {
     "type": "git",
@@ -35,6 +35,10 @@
     "./worklet": {
       "types": "./dist/worklet-processor.d.ts",
       "default": "./dist/worklet-processor.js"
+    },
+    "./worker": {
+      "types": "./dist/worker-entry.d.ts",
+      "default": "./dist/worker-entry.js"
     },
     "./ngan.wasm": "./dist/ngan.wasm"
   },

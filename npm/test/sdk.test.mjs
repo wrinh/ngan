@@ -20,6 +20,8 @@ import {
   hzToBark,
   barkToHz,
   spectrogramToDbMatrix,
+  planAudioChunks,
+  createNganWorker,
 } from '../dist/index.js';
 
 function makeSine(freq, fs, duration) {
@@ -434,4 +436,138 @@ test('Float64RingBuffer, resampleSinc, and psychoacoustic scales', () => {
   assert.ok(Math.abs(erbToHz(hzToErb(1000)) - 1000) < 1e-6);
   assert.ok(Math.abs(melToHz(hzToMel(1000)) - 1000) < 1e-6);
   assert.ok(Math.abs(barkToHz(hzToBark(1000)) - 1000) < 1e-6);
+});
+
+test('planAudioChunks, analyzeLongAudio, and streamLongAudio handle chunking, progress, and abort', async () => {
+  const engine = await enginePromise;
+  const fs = 16000;
+  const longVowel = makeVowel(180, 240, fs, 3.0);
+
+  const plan = planAudioChunks(longVowel.length, fs, {
+    chunkDurationSeconds: 1.0,
+    overlapDurationSeconds: 0.2,
+  });
+  assert.equal(plan.length, 3);
+  assert.equal(plan[0].sliceStartSample, 0);
+  assert.equal(plan[0].coreEndSample, fs);
+  assert.ok(plan[1].sliceStartSample < plan[1].coreStartSample);
+  assert.ok(plan[1].sliceEndSample > plan[1].coreEndSample);
+
+  const progressEvents = [];
+  const chunkEvents = [];
+  const res = await engine.analyzeLongAudio(longVowel, fs, {
+    chunkDurationSeconds: 1.0,
+    overlapDurationSeconds: 0.25,
+    pitch: { method: 'filtered_ac' },
+    formants: true,
+    spectrogram: true,
+    melSpectrogram: true,
+    mfcc: true,
+    onProgress(p) {
+      progressEvents.push(p);
+    },
+    onChunk(chunk) {
+      chunkEvents.push(chunk);
+    },
+  });
+
+  assert.equal(res.totalChunks, 3);
+  assert.equal(res.chunks.length, 3);
+  assert.equal(progressEvents.length, 3);
+  assert.equal(chunkEvents.length, 3);
+  assert.equal(progressEvents[2].percent, 100);
+  assert.ok(progressEvents[0].percent < progressEvents[1].percent);
+
+  assert.ok(res.pitch && res.pitch.frames.length > 180);
+  for (let i = 1; i < res.pitch.frames.length; i++) {
+    assert.ok(
+      res.pitch.frames[i].time > res.pitch.frames[i - 1].time,
+      `non-monotonic pitch frame time at ${i}`,
+    );
+  }
+  assert.ok(res.intensity && res.intensity.values.length > 250);
+  assert.ok(res.formants && res.formants.frames.length > 300);
+  assert.ok(res.spectrogram && res.spectrogram.numberOfTimeFrames > 500);
+  assert.ok(res.melSpectrogram && res.melSpectrogram.numberOfTimeFrames > 300);
+  assert.ok(res.mfcc && res.mfcc.frames.length > 300);
+
+  const streamed = [];
+  for await (const chunk of engine.streamLongAudio(longVowel, fs, {
+    chunkDurationSeconds: 1.5,
+    overlapDurationSeconds: 0.2,
+  })) {
+    streamed.push(chunk);
+  }
+  assert.equal(streamed.length, 2);
+  assert.equal(streamed[0].startTime, 0);
+  assert.equal(streamed[1].endTime, 3.0);
+
+  // Verify AbortSignal stops mid-stream
+  const ac = new AbortController();
+  await assert.rejects(
+    engine.analyzeLongAudio(longVowel, fs, {
+      chunkDurationSeconds: 1.0,
+      signal: ac.signal,
+      onProgress(p) {
+        if (p.chunkIndex === 0) ac.abort();
+      },
+    }),
+    { name: 'AbortError' },
+  );
+});
+
+test('createNganWorker runs single RPCs, analyzeLongAudio with onProgress, and streamLongAudio off-thread', async () => {
+  const worker = await createNganWorker();
+  try {
+    const fs = 16000;
+    const vowel = makeVowel(180, 240, fs, 2.5);
+
+    const pitchRes = await worker.analyzePitch(vowel, fs, {
+      method: 'filtered_ac',
+    });
+    const voiced = pitchRes.frames.filter((f) => f.frequency !== null);
+    assert.ok(voiced.length > 100);
+
+    const cppsRes = await worker.analyzeCpps(vowel, fs);
+    assert.ok(cppsRes.cppsDb !== null && cppsRes.cppsDb > 5.0);
+
+    const psolaRes = await worker.manipulatePsola(vowel, fs, {
+      durationFactor: 1.2,
+      pitchShiftSemitones: 2.0,
+    });
+    assert.ok(psolaRes instanceof Float64Array);
+    assert.ok(Math.abs(psolaRes.length - vowel.length * 1.2) < 128);
+
+    const workerProgress = [];
+    const workerChunks = [];
+    const longRes = await worker.analyzeLongAudio(vowel, fs, {
+      chunkDurationSeconds: 1.0,
+      overlapDurationSeconds: 0.2,
+      harmonicity: true,
+      barkSpectrogram: true,
+      onProgress(p) {
+        workerProgress.push(p);
+      },
+      onChunk(c) {
+        workerChunks.push(c);
+      },
+    });
+    assert.equal(longRes.totalChunks, 3);
+    assert.equal(workerProgress.length, 3);
+    assert.equal(workerProgress[2].percent, 100);
+    assert.equal(workerChunks.length, 3);
+    assert.ok(longRes.harmonicity && longRes.harmonicity.values.length > 150);
+    assert.ok(longRes.barkSpectrogram && longRes.barkSpectrogram.numberOfTimeFrames > 200);
+
+    const streamedChunks = [];
+    for await (const chunk of worker.streamLongAudio(vowel, fs, {
+      chunkDurationSeconds: 1.25,
+      overlapDurationSeconds: 0.2,
+    })) {
+      streamedChunks.push(chunk);
+    }
+    assert.equal(streamedChunks.length, 2);
+  } finally {
+    await worker.terminate();
+  }
 });

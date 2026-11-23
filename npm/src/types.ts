@@ -442,6 +442,112 @@ export interface NganInitOptions {
   wasmSource?: WasmSource;
 }
 
+/** Progress payload emitted during chunked/streaming long-audio analysis. */
+export interface LongAudioProgress {
+  chunkIndex: number;
+  totalChunks: number;
+  chunkStartTime: number;
+  chunkEndTime: number;
+  processedSamples: number;
+  totalSamples: number;
+  processedDurationSeconds: number;
+  totalDurationSeconds: number;
+  percent: number;
+  elapsedMs: number;
+  estimatedRemainingMs: number;
+}
+
+/** Sample/time bounds for one overlap-save analysis chunk. */
+export interface AudioChunkDescriptor {
+  chunkIndex: number;
+  totalChunks: number;
+  coreStartSample: number;
+  coreEndSample: number;
+  sliceStartSample: number;
+  sliceEndSample: number;
+  coreStartTime: number;
+  coreEndTime: number;
+  sliceStartTime: number;
+  sliceEndTime: number;
+}
+
+/** Acoustic analysis output for one core chunk window (timestamps are absolute). */
+export interface AudioChunkAnalysisResult {
+  chunkIndex: number;
+  totalChunks: number;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  intensity?: IntensityTier;
+  pitch?: PitchTier;
+  formants?: FormantTier;
+  harmonicity?: HarmonicityTier;
+  spectrogram?: Spectrogram;
+  melSpectrogram?: FilterBankMatrix;
+  barkSpectrogram?: FilterBankMatrix;
+  mfcc?: MfccResult;
+}
+
+/** Options for overlap-save chunked / streaming long-audio analysis. */
+export interface LongAudioAnalysisOptions {
+  /** Core duration per chunk in seconds (default `30.0`). */
+  chunkDurationSeconds?: number;
+  /** Overlap padding added on each side of a chunk in seconds (default `0.5`). */
+  overlapDurationSeconds?: number;
+  /** Yield to the event loop between chunks when running on main thread (default `true`). */
+  yieldBetweenChunks?: boolean;
+  /** Stitch per-chunk results into continuous full-duration tiers (default `true`). */
+  mergeResults?: boolean;
+  /** Allow transferring typed array buffers to a Web Worker when possible (default `false`). */
+  transfer?: boolean;
+  /** Optional abort signal to cancel long-audio analysis mid-stream. */
+  signal?: AbortSignal;
+  intensity?: boolean | IntensityOptions;
+  pitch?: boolean | PitchOptions;
+  formants?: boolean | FormantOptions;
+  harmonicity?: boolean | HarmonicityOptions;
+  spectrogram?: boolean | SpectrogramOptions;
+  melSpectrogram?: boolean | FilterBankSpectrogramOptions;
+  barkSpectrogram?: boolean | FilterBankSpectrogramOptions;
+  mfcc?: boolean | MfccOptions;
+  onProgress?: (progress: LongAudioProgress) => void;
+  onChunk?: (chunk: AudioChunkAnalysisResult, progress: LongAudioProgress) => void;
+}
+
+/** Combined result of overlap-save long-audio analysis. */
+export interface LongAudioAnalysisResult {
+  sampleRate: number;
+  duration: number;
+  totalChunks: number;
+  chunks: AudioChunkAnalysisResult[];
+  intensity?: IntensityTier;
+  pitch?: PitchTier;
+  formants?: FormantTier;
+  harmonicity?: HarmonicityTier;
+  spectrogram?: Spectrogram;
+  melSpectrogram?: FilterBankMatrix;
+  barkSpectrogram?: FilterBankMatrix;
+  mfcc?: MfccResult;
+}
+
+/** Minimal worker-like port interface accepted by `createNganWorker`. */
+export interface WorkerLike {
+  postMessage(message: unknown, transfer?: Transferable[]): void;
+  terminate?: () => void | Promise<unknown>;
+  addEventListener?: (type: string, listener: (event: any) => void) => void;
+  removeEventListener?: (type: string, listener: (event: any) => void) => void;
+  on?: (event: string, listener: (arg: any) => void) => void;
+  off?: (event: string, listener: (arg: any) => void) => void;
+}
+
+/** Options for `createNganWorker`. */
+export interface NganWorkerOptions extends NganInitOptions {
+  /** Custom module worker script URL (defaults to bundled `./worker-entry.js`). */
+  workerUrl?: string | URL;
+  /** Pre-created browser `Worker` or Node `worker_threads.Worker` instance. */
+  worker?: WorkerLike;
+}
+
 /** Raw exported functions from `web/web.mbt` compiled to wasm-gc. */
 export interface NganWasmExports extends WebAssembly.Exports {
   analyze_csv(samplesCsv: string, fs: number): string;

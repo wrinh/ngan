@@ -20,12 +20,6 @@
 
 Behavior is ported line-by-line from the Praat sources (`fon/Sound_to_Intensity.cpp`, `fon/Sound_to_Pitch.cpp`, `fon/Pitch.cpp`, `fon/Sound_to_Formant.cpp`, `fon/Sound_and_Spectrogram.cpp`, `dwsys/NUM2.cpp`): identical windows, identical normalizations, identical frame layouts and identical decision rules — see *Praat parity notes* below.
 
-## Online demo
-
-A small demo page (vanilla JS, no framework) loads the ~90 KB wasm-gc module, synthesizes a gliding two-formant vowel or analyzes a local audio file, and draws the spectrogram, pitch track, formants, intensity and waveform — all client-side, no uploads:
-
-**<https://ngan-demo.pages.dev>** (source: `web/`, deployed by `.github/workflows/deploy.yml` on every push to `main`).
-
 ## Quick start
 
 ```bash
@@ -184,7 +178,7 @@ Wasm-GC struct references cross the JS boundary without JSON copies: hand the en
 
 ## JavaScript / TypeScript SDK (`@wrinh/ngan` in `npm/`)
 
-An npm-ready TypeScript wrapper lives in [`npm/`](npm/README.md) (`@wrinh/ngan`) with zero runtime dependencies, full `.d.ts` types, a Web Audio API decoding/resampling bridge (`decodeAudio`), and real-time microphone streaming powered by an `AudioWorklet` + WASM-side O(1) ring buffer (`startMicrophoneStream` / `createStreamSession`):
+An npm-ready TypeScript wrapper lives in [`npm/`](npm/README.md) (`@wrinh/ngan`) with zero runtime dependencies, full `.d.ts` types, a Web Audio API decoding/resampling bridge (`decodeAudio`), an out-of-the-box Web Worker client (`createNganWorker`) with overlap-save chunked long-audio analysis (`analyzeLongAudio` / `streamLongAudio` + `onProgress`), and real-time microphone streaming powered by an `AudioWorklet` + WASM-side O(1) ring buffer (`startMicrophoneStream` / `createStreamSession`):
 
 ```ts
 import { createNgan, decodeAudio } from '@wrinh/ngan';
@@ -223,8 +217,8 @@ ngan
 ├── dsp/                  # radix-2 FFT, cross-correlation, Kaiser/Hann/Gaussian windows, sinc resampler, Burg LPC
 ├── analysis/             # intensity, pitch (ac/cc), harmonicity, point_process, jitter/shimmer, formants & tracking, spectrogram, ltas, spectral_features, segment_summary
 ├── textgrid/             # Praat .TextGrid parser & serializer (Long, Short, Chronological)
-├── web/                  # WASM-GC FFI boundary (web.mbt) & online demo
-├── npm/                  # TypeScript npm SDK, Web Audio bridge & AudioWorklet streaming
+├── web/                  # WASM-GC FFI boundary (web.mbt) powering @wrinh/ngan
+├── npm/                  # TypeScript npm SDK, Web Worker wrapper, chunked analysis & AudioWorklet streaming
 └── cmd/main              # demo executable
 ```
 
