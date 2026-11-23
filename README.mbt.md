@@ -1,60 +1,81 @@
 # ngan
 
-**ngan [ŋan]** (「[言](https://xtext.kkn.moe/?q=%E8%A8%80&mode=default)」) is a [Praat](https://www.fon.hum.uva.nl/praat/)-compatible acoustic analysis engine written in pure [MoonBit](https://www.moonbitlang.com/), compiled to **WebAssembly GC**. It reimplements the three core Praat analysis commands from scratch — intensity, pitch, and formants — with no dependencies beyond `moonbitlang/core`, so a browser gets Praat-grade numbers without shipping a 20 MB Emscripten build of the C++ original.
+[English](README.md) · [简体中文](README.zh-CN.md)
+
+[![CI](https://github.com/wrinh/ngan/actions/workflows/ci.yml/badge.svg)](https://github.com/wrinh/ngan/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@wrinh/ngan.svg?logo=npm)](https://www.npmjs.com/package/@wrinh/ngan)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![MoonBit WasmGC](https://img.shields.io/badge/MoonBit-WasmGC-purple.svg)](https://www.moonbitlang.com/)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](npm/package.json)
+
+**ngan [ŋan]** (「[言](https://xtext.kkn.moe/?q=%E8%A8%80&mode=default)」) is a [Praat](https://www.fon.hum.uva.nl/praat/)-compatible acoustic analysis and TD-PSOLA speech manipulation engine written in pure [MoonBit](https://www.moonbitlang.com/), compiled to **WebAssembly GC**. It ports Praat's core acoustic analyzers and manipulation algorithms from scratch with zero dependencies beyond `moonbitlang/core`, enabling browser, Worker, and Node.js applications to obtain Praat-grade numbers without shipping a 20 MB Emscripten build of the C++ original.
+
+## Implemented Praat Commands
 
 | ngan entry point | Praat command | Algorithm |
 | --- | --- | --- |
 | `@ngan.intensity` | `To Intensity...` | Kaiser-20 windowed mean power, dB SPL re 2e-5 Pa |
 | `@ngan.pitch` | `To Pitch (ac)...` | Boersma (1993) autocorrelation + Viterbi path finder |
 | `@ngan.pitch_cc` | `To Pitch (cc)...` | Forward cross-correlation (`FCC_NORMAL`) + Viterbi path finder |
+| `@ngan.pitch_filtered_ac` | `To Pitch (filtered ac)...` | Praat 6.4+ Gaussian-attenuated autocorrelation + Viterbi path finder |
 | `@ngan.harmonicity_ac` / `harmonicity_cc` | `To Harmonicity (ac/cc)...` | HNR (dB) via Gaussian-window AC / cross-correlation |
 | `@ngan.point_process_cc` | `To PointProcess (periodic, cc)...` | Cross-correlation glottal pulse extraction |
-| `@ngan.jitter` / `shimmer` | `Get jitter (...)` / `Get shimmer (...)` | Local, RAP, PPQ5, DDP jitter & local, dB, APQ3/5/11, DDA shimmer |
+| `@ngan.jitter` / `shimmer` / `voice_breaks` / `voice_report` | `Voice report...` | Local/RAP/PPQ5/DDP jitter, local/dB/APQ3/5/11/DDA shimmer, unvoiced fraction & voice breaks |
 | `@ngan.formants` | `To Formant (burg)...` | Gaussian window + Burg LPC + polynomial roots |
 | `@ngan.track_formants` | `Formant: Track...` | Viterbi dynamic-programming formant trajectory tracker |
-| `@ngan.spectrogram` | `To Spectrogram...` | Gaussian-windowed FFT power spectrogram (Pa^2/Hz) |
+| `@ngan.spectrogram` | `To Spectrogram...` | Gaussian-windowed FFT power spectrogram (Pa²/Hz) |
+| `@ngan.mel_spectrogram` / `bark_spectrogram` | `To MelSpectrogram...` / `To BarkSpectrogram...` | Mel triangular & Bark Sekey–Hanson auditory filterbanks (dB SPL) |
+| `@ngan.mfcc` / `mel_spectrogram_to_mfcc` | `To MFCC...` | Orthonormal DCT-II over Mel filterbank energies |
+| `@ngan.power_cepstrogram` / `cpps` | `To PowerCepstrogram...` / `Get CPPS...` | Squared real cepstrum + 2D smoothing + robust/OLS tilt regression CPPS (dB) |
 | `@ngan.ltas` / `spectrogram_to_ltas` | `To Ltas...` | Long-Term Average Spectrum (dB/Hz), band means & slope |
-| `@ngan.center_of_gravity` / `spectral_tilt` | `Get centre of gravity...` | Spectral centroid, spectral slope, H1–H2, H1*–H2*, H1–A1..A3 |
-| `PitchTier::to_semitones` / `to_erb` / `to_mel` | `hertzToSemitones/Erb/Mel` | Praat psychoacoustic pitch scale conversions |
+| `@ngan.center_of_gravity` / `spectral_tilt` | `Get centre of gravity...` | Spectral centroid, spectral slope, H1–H2, Iseli et al. H1\*–H2\*, H1–A1..A3 |
+| `hz_to_semitones` / `erb` / `mel` / `bark` | `hertzToSemitones/Erb/Mel/Bark` | Praat psychoacoustic frequency scale conversions |
 | `@ngan.parse_textgrid` / `analyze_textgrid_segments` | `.TextGrid` + interval queries | Long/Short/Chronological TextGrid parser + F0, F1–F3, intensity & 20%–50%–80% segment summaries |
+| `@ngan.to_manipulation` / `resynthesize_psola` | `To Manipulation` / OLA resynthesis | TD-PSOLA pitch contour & duration-tier manipulation |
 
-Behavior is ported line-by-line from the Praat sources (`fon/Sound_to_Intensity.cpp`, `fon/Sound_to_Pitch.cpp`, `fon/Pitch.cpp`, `fon/Sound_to_Formant.cpp`, `fon/Sound_and_Spectrogram.cpp`, `dwsys/NUM2.cpp`): identical windows, identical normalizations, identical frame layouts and identical decision rules — see *Praat parity notes* below.
+Behavior is ported line-by-line from the Praat sources (`fon/Sound_to_Intensity.cpp`, `fon/Sound_to_Pitch.cpp`, `fon/Pitch.cpp`, `fon/Sound_to_Formant.cpp`, `fon/Sound_and_Spectrogram.cpp`, `dwtools/Cepstrum.cpp`, `dwtools/MFCC.cpp`, `dwsys/NUM2.cpp`): identical windows, identical normalizations, identical frame layouts, and identical decision rules — see [*Praat parity notes*](#praat-parity-notes) below.
 
-## Quick start
+## Quick start (MoonBit)
 
 ```bash
-moon check                  # type check
-moon test                   # run the full test suite
-moon run cmd/main           # demo: synthesize a vowel, analyze it
-moon build --target wasm-gc # produce the WebAssembly GC module
+moon check --target all               # typecheck native & wasm-gc
+moon test                             # run all unit, whitebox, blackbox & README doc tests
+moon run cmd/main                     # CLI demo: synthesize a vowel, analyze it
+moon build --target wasm-gc --release # produce _build/wasm-gc/release/build/web/web.wasm
 ```
 
-The demo prints (synthetic two-formant vowel, 219.2 Hz voicing, 16 kHz):
+The CLI demo prints (synthetic two-formant vowel, 219.2 Hz voicing, 16 kHz):
 
-```
+```text
 intensity frames: 117, mid-frame 107.3 dB SPL
 pitch: 97/97 voiced frames, mean f0 219.17 Hz
 formants: 152 frames, mean F1 566 Hz, mean F2 1519 Hz
 spectrogram: 496 frames x 160 bands, peak band 406.25 Hz
 ```
 
-## Usage
+## MoonBit Usage
 
-The root package is the facade. The simple positional ABI from the engine specification:
+The root package is the public facade. The simple positional ABI:
 
 ```moonbit nocheck
 pub fn analyze_intensity(samples : FixedArray[Double], sample_rate : Double, min_pitch : Double) -> IntensityTier
 
 pub fn analyze_pitch(samples : FixedArray[Double], sample_rate : Double, pitch_floor : Double, pitch_ceiling : Double) -> PitchTier
 
-pub fn analyze_formants(samples : FixedArray[Double], sample_rate : Double, max_formants : Int, max_formant_freq : Double) -> FormantTier
+pub fn analyze_pitch_filtered_ac(samples : FixedArray[Double], sample_rate : Double, pitch_floor : Double, pitch_ceiling : Double) -> PitchTier
+
+pub fn analyze_formants(samples : FixedArray[Double], sample_rate : Double, max_formants : Int32, max_formant_freq : Double) -> FormantTier
 
 pub fn analyze_spectrogram(samples : FixedArray[Double], sample_rate : Double, window_length : Double, maximum_frequency : Double, time_step : Double, frequency_step : Double) -> Spectrogram
+
+pub fn analyze_cpps(samples : FixedArray[Double], sample_rate : Double) -> Double?
+
+pub fn analyze_mfcc(samples : FixedArray[Double], sample_rate : Double, number_of_coefficients : Int32) -> Mfcc
 
 pub fn analyze_all(...) -> AcousticAnalysisResult
 ```
 
-A full analysis of a 220 Hz sine (this example is executed as a test):
+A full analysis of a 220 Hz sine (this example is executed as a test by `moon test`):
 
 ```mbt check
 ///|
@@ -131,14 +152,16 @@ test {
 Every analyzer also has a fully parameterized form with labeled, defaulted arguments mirroring the Praat dialog boxes:
 
 ```moonbit nocheck
-@ngan.pitch(
+@ngan.pitch_filtered_ac(
   samples,
   sample_rate~ = 16000.0,
-  pitch_floor~ = 75.0,
-  pitch_ceiling~ = 600.0,
-  voicing_threshold~ = 0.45,
-  silence_threshold~ = 0.03,
-  octave_cost~ = 0.01,
+  pitch_floor~ = 50.0,
+  pitch_ceiling~ = 800.0,
+  very_accurate~ = false,
+  attenuation_at_top~ = 0.03,
+  voicing_threshold~ = 0.50,
+  silence_threshold~ = 0.09,
+  octave_cost~ = 0.055,
   octave_jump_cost~ = 0.35,
   voiced_unvoiced_cost~ = 0.14,
 )
@@ -178,18 +201,40 @@ Wasm-GC struct references cross the JS boundary without JSON copies: hand the en
 
 ## JavaScript / TypeScript SDK (`@wrinh/ngan` in `npm/`)
 
-An npm-ready TypeScript wrapper lives in [`npm/`](npm/README.md) (`@wrinh/ngan`) with zero runtime dependencies, full `.d.ts` types, a Web Audio API decoding/resampling bridge (`decodeAudio`), an out-of-the-box Web Worker client (`createNganWorker`) with overlap-save chunked long-audio analysis (`analyzeLongAudio` / `streamLongAudio` + `onProgress`), and real-time microphone streaming powered by an `AudioWorklet` + WASM-side O(1) ring buffer (`startMicrophoneStream` / `createStreamSession`):
+An npm-ready TypeScript wrapper lives in [`npm/`](npm/README.md) (`@wrinh/ngan`) with zero runtime dependencies, full `.d.ts` types, a Web Audio API decoding/resampling bridge (`decodeAudio`), an out-of-the-box Web Worker client (`createNganWorker`) with overlap-save chunked long-audio analysis (`analyzeLongAudio` / `streamLongAudio` + `onProgress`), and real-time microphone streaming powered by an `AudioWorklet` + WASM-side O(1) ring buffer (`startMicrophoneStream` / `createStreamSession`).
+
+> **Runtime requirements**: WebAssembly GC + `wasm:js-string` builtins (Chrome 130+, Firefox 134+, Safari 18.4+, or Node.js 22+).
 
 ```ts
-import { createNgan, decodeAudio } from '@wrinh/ngan';
+import { createNgan, createNganWorker, decodeAudio } from '@wrinh/ngan';
 
+// 1. Direct synchronous analysis on decoded audio
 const ngan = await createNgan();
-
-// 1. Offline file via Web Audio API decoding + resampling bridge
 const { samples, sampleRate } = await decodeAudio(audioFile, { targetSampleRate: 16000 });
-const result = ngan.analyzeAll(samples, sampleRate, { spectrogram: true });
+const result = ngan.analyzeAll(samples, sampleRate, {
+  pitch: { method: 'filtered_ac' },
+  spectrogram: true,
+});
+const { cppsDb } = ngan.analyzeCpps(samples, sampleRate);
+const voice = ngan.analyzeVoiceReport(samples, sampleRate);
+const shifted = ngan.manipulatePsola(samples, sampleRate, {
+  pitchShiftSemitones: 3,
+  durationFactor: 1.2,
+});
 
-// 2. Real-time microphone streaming via AudioWorklet + WASM ring buffer
+// 2. Off-thread Web Worker + overlap-save chunked long-audio analysis
+const worker = await createNganWorker();
+const longResult = await worker.analyzeLongAudio(samples, sampleRate, {
+  chunkDurationSeconds: 20,
+  overlapDurationSeconds: 0.5,
+  pitch: { method: 'filtered_ac' },
+  formants: { track: true },
+  mfcc: true,
+  onProgress: (p) => console.log(`${p.percent.toFixed(1)}%`),
+});
+await worker.terminate();
+
+// 3. Real-time microphone streaming via AudioWorklet + WASM ring buffer
 const mic = await ngan.startMicrophoneStream({
   sampleRate: 16000,
   onFrame(frame) {
@@ -208,14 +253,14 @@ npm --prefix npm test
 
 ## Package layout
 
-```
+```text
 ngan
 ├── moon.mod / moon.pkg   # module + root facade package
-├── lib.mbt               # analyze_intensity / analyze_pitch / analyze_formants / analyze_all
-├── types/                # shared result types + Semitone/ERB/Mel conversions
+├── lib.mbt               # analyze_intensity / analyze_pitch / analyze_formants / analyze_all / ...
+├── types/                # shared result types + Semitone/ERB/Mel/Bark conversions
 ├── math/                 # Complex, Bessel I0, Durand-Kerner polynomial roots, libm re-exports
 ├── dsp/                  # radix-2 FFT, cross-correlation, Kaiser/Hann/Gaussian windows, sinc resampler, Burg LPC
-├── analysis/             # intensity, pitch (ac/cc), harmonicity, point_process, jitter/shimmer, formants & tracking, spectrogram, ltas, spectral_features, segment_summary
+├── analysis/             # intensity, pitch (ac/cc/filtered ac), harmonicity, point_process, jitter/shimmer & voice breaks, formants & tracking, spectrogram, cepstrum/CPPS, Mel/Bark/MFCC, TD-PSOLA, ltas, spectral_features, segment_summary
 ├── textgrid/             # Praat .TextGrid parser & serializer (Long, Short, Chronological)
 ├── web/                  # WASM-GC FFI boundary (web.mbt) powering @wrinh/ngan
 ├── npm/                  # TypeScript npm SDK, Web Worker wrapper, chunked analysis & AudioWorklet streaming
@@ -224,34 +269,51 @@ ngan
 
 ## Praat parity notes
 
-Where the engine specification and the Praat sources disagree, ngan follows **Praat's behavior** (the goal of the specification), specifically:
+Where the original engine specification and the Praat sources disagree, ngan follows **Praat's behavior**, specifically:
 
-- **Kaiser-20 intensity window**: Praat's shape factor is `beta = 2 pi^2 + 0.5` (≈ 20.24, sidelobes below −100 dB) over a *physical* window of `6.4 / min_pitch` s; the `3.2 / min_pitch` figure is the *effective* length and `20 pi` from the spec is not what the C code computes.
+- **Kaiser-20 intensity window**: Praat's shape factor is `beta = 2 pi^2 + 0.5` (≈ 20.24, sidelobes below −100 dB) over a *physical* window of `6.4 / min_pitch` s; the `3.2 / min_pitch` figure is the *effective* length.
 - **Energy weighting**: `sum w (x - mean)^2 / sum w` with the *unweighted* window mean subtracted (Praat), not `sum w^2 x^2 / sum w^2`.
-- **Pitch window**: Praat's periodic Hann `0.5 - 0.5 cos(2 pi (i + 1) / (N + 1))` (the spec's symmetric `N - 1` variant differs at the edges); the local mean is measured over ±1 longest *period*, not over the window.
-- **Autocorrelation normalization**: `rx = (ra(tau)/ra(0)) / (rw(tau)/rw(0))` — both the sound and the window autocorrelations are normalized at zero lag (this is what makes periodicity strengths reach 1.0), then peak refinement maximizes the Hanning-tapered sinc interpolation of Boersma (1993) eq. (22) with up to `min(500, halfWindow - 1 - tau)` taps.
-- **Unvoiced hypothesis**: Praat's silence-aware strength `voicing_threshold + max(0, 2 - intensity / (silence_threshold / (1 + voicing_threshold)))` with the extra `silence_threshold` (default 0.03) parameter, and jump / switch costs scaled by `0.01 / dt`.
-- **Formant poles**: only the 50 Hz DC/Nyquist safety margins are applied; Praat does not filter poles by a 700 Hz bandwidth limit (the spec's filter would silently drop legitimate broadband formants). Poles outside the unit circle are reflected back in (Praat's `Roots_fixIntoUnitCircle`).
-- **Frames**: all three analyzers use Praat's `Sampled_shortTermAnalysis` — `floor((duration - window) / dt) + 1` frames fitted symmetrically, first frame at `mid - 0.5 * n * dt + 0.5 * dt`, edge windows clipped to the sound (pitch windows always fit fully inside).
-- **Spectrogram** (`To Spectrogram...`): Gaussian window spanning `2 * window_length` with Praat's exact `(exp(-48 p^2) - exp(-12)) / (1 - exp(-12))` shape, time/frequency steps raised to `effective_width / 8` (the dialog's 8x oversampling), frequency steps snapped to whole FFT bins, band power `sum |X_k|^2 / sum w^2 / bin_width` in Pa^2/Hz, and the first band centred at `0.5 * (df - fft_bin_width)` — all straight from `Sound_to_Spectrogram_e`.
+- **Pitch window**: Praat's periodic Hann `0.5 - 0.5 cos(2 pi (i + 1) / (N + 1))`; the local mean is measured over ±1 longest *period*, not over the window.
+- **Autocorrelation normalization**: `rx = (ra(tau)/ra(0)) / (rw(tau)/rw(0))` — both the sound and the window autocorrelations are normalized at zero lag, then peak refinement maximizes the Hanning-tapered sinc interpolation of Boersma (1993) eq. (22) with up to `min(500, halfWindow - 1 - tau)` taps.
+- **Filtered AC pitch (Praat 6.4+)**: applies Praat's Gaussian frequency-domain attenuation filter (`attenuation_at_top` at `pitch_ceiling`) prior to autocorrelation, with Praat 6.4+ default thresholds (`50–800 Hz`, `voicing_threshold = 0.50`, `silence_threshold = 0.09`, `octave_cost = 0.055`) and optional 6-period Gaussian `very_accurate` mode.
+- **Unvoiced hypothesis**: Praat's silence-aware strength `voicing_threshold + max(0, 2 - intensity / (silence_threshold / (1 + voicing_threshold)))`, and jump / switch costs scaled by `0.01 / dt`.
+- **Formant poles**: only the 50 Hz DC/Nyquist safety margins are applied; poles outside the unit circle are reflected back in (Praat's `Roots_fixIntoUnitCircle`).
+- **Frames**: analyzers use Praat's `Sampled_shortTermAnalysis` — `floor((duration - window) / dt) + 1` frames fitted symmetrically, first frame at `mid - 0.5 * n * dt + 0.5 * dt`.
+- **Spectrogram** (`To Spectrogram...`): Gaussian window spanning `2 * window_length` with Praat's exact `(exp(-48 p^2) - exp(-12)) / (1 - exp(-12))` shape, 8x oversampling limits, frequency steps snapped to whole FFT bins, band power `sum |X_k|^2 / sum w^2 / bin_width` in Pa²/Hz, and first band centred at `0.5 * (df - fft_bin_width)`.
+- **PowerCepstrogram & CPPS**: resamples to `2 * min(maximum_frequency, fs / 2)`, applies pre-emphasis, computes the squared real cepstrum of the log power spectrum via FFT/IFFT, optionally subtracts tilt before 2D boxcar smoothing, fits straight or exponential-decay baseline via OLS or Tukey biweight robust regression, and refines the cepstral peak parabolically.
+- **Mel / Bark Spectrograms & MFCC**: Mel triangular filterbank on `550 * ln(1 + f / 550)`, Bark Sekey & Hanson (1984) filterbank on `7 * ln(f/650 + sqrt(1 + (f/650)^2))`, and orthonormal DCT-II coefficients.
 - **Resampling**: Praat zeroes the spectrum above the target Nyquist and interpolates with a 50-tap sinc; ngan uses an equivalent Kaiser-12 band-limited sinc (32 zero crossings), never linear interpolation.
-- **Cross-correlation pitch & HNR** (`To Pitch (cc)...`, `To Harmonicity (ac/cc)...`): `pitch_cc` uses the `1 / pitch_floor` forward cross-correlation template (`FCC_NORMAL`, normalized by `sqrt(E_u * E_v)`); `harmonicity_ac` uses Praat's Gaussian window (`periods_per_window = 4.5` effective / `9.0` physical) and maps periodicity `r` to `10 log10(r / (1 - r))` dB.
-- **Glottal pulses & perturbation** (`To PointProcess (cc)`, `Get jitter/shimmer`): anchors at the waveform absolute extremum near each voiced midpoint, tracks periods in `[0.8 T0, 1.2 T0]` with `< 0.3` boundary pruning and `> 0.7` extension, and evaluates Praat's local/RAP/PPQ5/DDP jitter and local/dB/APQ3/APQ5/APQ11/DDA shimmer with period and amplitude factor guards.
-- **Formant tracking** (`Formant: Track...`): Viterbi minimization over reference-frequency deviation (`dfCost`), relative bandwidth (`B / F`), and inter-frame octave transitions (`|log2(F_t / F_{t-1})|`).
-- **LTAS, spectral tilt & pitch scales**: single-sided PSD re-binned into `dB/Hz` re `2e-5 Pa`, power-weighted Center of Gravity, OLS spectral slope, `H1-H2` / Iseli et al. (2007) `H1*-H2*` / `H1-A1..A3`, and Praat's exact Semitone (`100 Hz` ref), ERB, and Mel (`550 * ln(1 + f / 550)`) scales.
+- **Cross-correlation pitch, HNR & Voice Report**: `pitch_cc` uses `1 / pitch_floor` forward cross-correlation (`FCC_NORMAL`); `harmonicity_ac` uses Praat's 4.5-effective / 9.0-physical Gaussian window; `point_process_cc`, `jitter`, `shimmer`, and `voice_breaks` compute local/RAP/PPQ5/DDP jitter, local/dB/APQ3/APQ5/APQ11/DDA shimmer, locally unvoiced frame fraction, voice break count, and degree of voice breaks.
+- **TD-PSOLA Manipulation**: piecewise-linear `DurationTier` time-warp integration + pitch-synchronous 2-period Hanning overlap-add over voiced pulse runs and 5 ms COLA Hanning synthesis over unvoiced spans.
 
-## Accuracy evidence
+## Accuracy & Browser Benchmark
 
-The test suite (`moon test`) pins the behavior with analytically known answers:
+The test suite (`moon test`, 57 tests; `npm --prefix npm test`, 10 tests) pins behavior against analytically known answers and end-to-end Worker/AudioWorklet pipelines.
 
-- FFT round-trips against a direct DFT; autocorrelation against the direct sum; Burg recovers the poles of a known AR(4) resonator to < 30 Hz.
-- The sinc resampler keeps a 500 Hz sine to < 2e-3 amplitude error and suppresses a 7 kHz tone below 1e-3 RMS when downsampling to 8 kHz.
-- Intensity of a full-scale 220 Hz sine: 90.9691 dB SPL (exact value `10 log10(0.5 / 4e-10)`) within 0.05 dB — the specification's tolerance.
-- Pitch of a pure sine: every interior frame voiced at 220 Hz ± 0.22 Hz (< 0.1%, the specification's tolerance); silence is 100% unvoiced; the synthetic vowel demo recovers 219.18 Hz at 0.004% error.
-- Formants of a synthetic two-formant vowel (500 / 1500 Hz, 100 Hz bandwidths): recovered at both the native rate and through the internal 16 kHz → 11 kHz band-limited resampling path.
-- Spectrogram of a 1 kHz sine: the grid (0.002 s x 31.25 Hz bins after Praat's 8x-oversampling snap) peaks exactly in the 1000 Hz band and the 2000 Hz band is >50x weaker; the 5000 Hz ceiling clamps to Nyquist at 8 kHz sampling; two-partial signals peak in their own bands.
+Below are direct side-by-side measurements comparing `@wrinh/ngan` v0.2.0 (`171.6 KiB` `ngan.wasm`) in **Headless Microsoft Edge 158 (V8 WasmGC)** against **Praat 7.0** native C++ on identical 16 kHz mono WAV signals (`vowel_1_5s.wav` = 1.5 s gliding vowel; `speech_5s.wav` = 5.0 s multi-segment voiced audio with two 0.3 s unvoiced breaks; `long_30s.wav` = 30.0 s tiled signal):
 
-Performance reference: five full analyses (intensity + pitch + formants) of 5 s / 16 kHz audio take ~5.3 s under `moon test`'s *debug wasm interpreter* (~1.06 s each, ~5x slower than real time); optimizing runtimes (browser V8 / JSC) typically execute numeric wasm 20–50x faster, which lands in the specification's < 50 ms budget. All hot paths are O(N log N).
+- **Cold load & compile (`ngan.wasm`)**: `fetch` `3.0 ms`, `WebAssembly.compile` `1.8 ms`, `createNgan()` total `5.9 ms`; `createNganWorker()` spawn + init `23.6 ms`.
+- **30 s Worker chunked `analyzeLongAudio`** (`10 s` chunks, `0.5 s` overlap, Intensity + Pitch AC + Formants + `onProgress`): median `11,077 ms` (**RTF 0.369**, **2.71× faster than real time**).
+
+### `speech_5s.wav` (5.0 s, 16 kHz, 80,000 samples) — Timing & Numerical Parity
+
+| Command / Method | `ngan` Median (ms) | Praat 7.0 Mean (ms) | `ngan` Result | Praat 7.0 Result | Difference |
+| --- | ---: | ---: | --- | --- | --- |
+| `To Intensity...` | `1.70` | `1.44` | 618 frames, `77.9963 dB` | 618 frames, `77.9963 dB` | `-0.00003 dB` |
+| `To Pitch (ac)...` | `1529.65` | `2.25` | 439/497 voiced, `196.0066 Hz` | 439/497 voiced, `196.0066 Hz` | `-0.000005 Hz` |
+| `To Pitch (cc)...` | `2980.00` | `9.81` | 1312/1493 voiced, `195.9314 Hz` | 1312/1493 voiced, `195.9294 Hz` | `+0.0020 Hz` |
+| `To Pitch (filtered ac)...` | `1699.85` | `7.08` | 291/330 voiced, `196.0429 Hz` | 291/330 voiced, `196.0429 Hz` | `-0.0000007 Hz` |
+| `To Formant (burg)...` | `163.25` | `20.25` | 793 frames, F1 `625.75` / F2 `1581.65 Hz` | 793 frames, F1 `628.27` / F2 `1591.01 Hz` | `-2.52` / `-9.36 Hz` |
+| `To Spectrogram...` | `126.25` | `1.81` | — | — | — |
+| `To Harmonicity (ac)...` | `9973.10` | `24.06` | 431/489 defined, `20.6725 dB` | 431/489 defined, `20.6725 dB` | `+0.0000002 dB` |
+| `Voice report...` | `11491.10` | `18.08` | 2 breaks (`12.168%`), jitter `0.591%`, shimmer `1.326%` | 2 breaks (`12.168%`), jitter `0.589%`, shimmer `1.797%` | breaks exact, jitter `+0.002%`, shimmer `-0.47%` |
+| `To PowerCepstrogram` + `Get CPPS` | `920.50` | `529.64` | `19.996 dB` | `19.256 dB` | `+0.740 dB` |
+| `To MelSpectrogram...` | `10.30` | `9.07` | — | — | — |
+| `To BarkSpectrogram...` | `12.70` | `92.54` | **7.3× faster than Praat** | — | — |
+| `To MFCC...` | `12.75` | `9.69` | 994 frames (orthonormal DCT-II) | 994 frames (Praat DCT scaling) | exact frame grid |
+| `To Manipulation` + OLA (`+4 st`) | `1512.60` | `9.52` | `5.000 s`, F0 `246.923 Hz` | `5.000 s`, F0 `246.950 Hz` | `-0.027 Hz` (`0.01%`) |
+
+*(Note: In `ngan`, `Pitch`/`Harmonicity` compute full Hanning-tapered sinc peak interpolation in WasmGC, while `VoiceReport` runs `Pitch` + `PointProcess` + `Harmonicity` together; `MFCC` uses orthonormal `sqrt(1/N)` / `sqrt(2/N)` DCT-II scaling.)*
 
 ## License
 

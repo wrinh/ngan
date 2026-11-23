@@ -1,5 +1,11 @@
 # @wrinh/ngan
 
+[English](README.md) · [中文文档](https://github.com/wrinh/ngan/blob/main/README.zh-CN.md)
+
+[![npm version](https://img.shields.io/npm/v/@wrinh/ngan.svg?logo=npm)](https://www.npmjs.com/package/@wrinh/ngan)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](https://github.com/wrinh/ngan/blob/main/LICENSE)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](https://github.com/wrinh/ngan/blob/main/npm/package.json)
+
 Praat-compatible acoustic analysis & TD-PSOLA synthesis engine (`To Intensity...`, `To Pitch (ac/cc/filtered ac)...`, `To Formant (burg)...`, `Formant: Track...`, `To Spectrogram...`, `To MelSpectrogram...`, `To BarkSpectrogram...`, `To MFCC...`, `To PowerCepstrogram...`, `Get CPPS...`, `To Harmonicity...`, jitter/shimmer & voice breaks, LTAS, `.TextGrid` segment summarization, and TD-PSOLA `Manipulation`) compiled from pure [MoonBit](https://www.moonbitlang.com/) to **WebAssembly GC** (zero external runtime dependencies).
 
 Includes out-of-the-box TypeScript types, a **Web Worker wrapper** (`createNganWorker`), **overlap-save chunked & streaming long-audio analysis** (`analyzeLongAudio` / `streamLongAudio` + `onProgress`), a Web Audio API decoding/resampling bridge (`decodeAudio`), and real-time microphone streaming powered by an `AudioWorklet` + WASM-side O(1) circular ring buffer.
