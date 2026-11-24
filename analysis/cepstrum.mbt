@@ -94,11 +94,10 @@ pub fn power_cepstrogram(
   let half_nfft = nfft / 2
   let nq = half_nfft + 1
   let dq = 1.0 / fs
-  let plan = @dsp.FftPlan::new(nfft)
-  let re : FixedArray[Double] = FixedArray::make(nfft, 0.0)
-  let im : FixedArray[Double] = FixedArray::make(nfft, 0.0)
-  let log_re : FixedArray[Double] = FixedArray::make(nfft, 0.0)
-  let log_im : FixedArray[Double] = FixedArray::make(nfft, 0.0)
+  let rplan = @dsp.RealFftPlan::new(nfft)
+  let frame_buf : FixedArray[Double] = FixedArray::make(nwin, 0.0)
+  let log_spec : FixedArray[Double] = FixedArray::make(nq, 0.0)
+  let cep_out : FixedArray[Double] = FixedArray::make(nq, 0.0)
   let power : FixedArray[Double] = FixedArray::make(nq * nframes, 0.0)
   let psd_scale = 1.0 / (windowssq * fs * nfft.to_double())
   for iframe in 0..<nframes {
@@ -106,41 +105,40 @@ pub fn power_cepstrogram(
     let lo = low_index(t, fs)
     let start = lo + 1 - halfnsamp
     let mut mean = 0.0
-    let mut count = 0
-    for k in 0..<nwin {
-      let idx = start + k
-      if idx >= 0 && idx < n {
-        mean += data[idx]
-        count += 1
+    if start >= 0 && start + nwin <= n {
+      for k in 0..<nwin {
+        mean += data[start + k]
+      }
+      mean /= nwin.to_double()
+      for k in 0..<nwin {
+        frame_buf[k] = (data[start + k] - mean) * win[k]
+      }
+    } else {
+      let mut count = 0
+      for k in 0..<nwin {
+        let idx = start + k
+        if idx >= 0 && idx < n {
+          mean += data[idx]
+          count += 1
+        }
+      }
+      if count > 0 {
+        mean /= count.to_double()
+      }
+      for k in 0..<nwin {
+        let idx = start + k
+        let v = if idx >= 0 && idx < n { data[idx] - mean } else { 0.0 }
+        frame_buf[k] = v * win[k]
       }
     }
-    if count > 0 {
-      mean /= count.to_double()
-    }
-    for k in 0..<nwin {
-      let idx = start + k
-      let v = if idx >= 0 && idx < n { data[idx] - mean } else { 0.0 }
-      re[k] = v * win[k]
-      im[k] = 0.0
-    }
-    for k in nwin..<nfft {
-      re[k] = 0.0
-      im[k] = 0.0
-    }
-    plan.transform(re, im, inverse=false)
+    rplan.forward_power(frame_buf, nwin, log_spec)
     for k in 0..<=half_nfft {
-      let p = (re[k] * re[k] + im[k] * im[k]) * psd_scale
-      let lp = @math.ln(if p > 1.0e-30 { p } else { 1.0e-30 })
-      log_re[k] = lp
-      log_im[k] = 0.0
-      if k > 0 && k < half_nfft {
-        log_re[nfft - k] = lp
-        log_im[nfft - k] = 0.0
-      }
+      let p = log_spec[k] * psd_scale
+      log_spec[k] = @math.ln(if p > 1.0e-30 { p } else { 1.0e-30 })
     }
-    plan.transform(log_re, log_im, inverse=true)
+    rplan.inverse_real_even(log_spec, cep_out, nq)
     for q in 0..<nq {
-      let c = log_re[q]
+      let c = cep_out[q]
       power[q * nframes + iframe] = c * c
     }
   }
@@ -156,88 +154,151 @@ pub fn power_cepstrogram(
 }
 
 ///|
-fn fit_linear_ols(xs : Array[Double], ys : Array[Double]) -> (Double, Double)? {
-  let n = xs.length()
-  if n < 2 {
-    return None
+/// In-place Hoare quickselect: places the `k`-th smallest element of
+/// `a[0..<n]` at `a[k]`, with all `a[0..<k] <= a[k]`.
+fn quickselect(a : FixedArray[Double], n : Int32, k : Int32) -> Double {
+  let mut lo = 0
+  let mut hi = n - 1
+  while lo < hi {
+    let mid = (lo + hi) / 2
+    // Median-of-three pivot selection for O(N) performance on sorted/noisy inputs.
+    if a[mid] < a[lo] {
+      let t = a[lo]
+      a[lo] = a[mid]
+      a[mid] = t
+    }
+    if a[hi] < a[lo] {
+      let t = a[lo]
+      a[lo] = a[hi]
+      a[hi] = t
+    }
+    if a[mid] < a[hi] {
+      let t = a[mid]
+      a[mid] = a[hi]
+      a[hi] = t
+    }
+    let pivot = a[hi]
+    let mut i = lo
+    let mut j = hi - 1
+    while true {
+      while i <= j && a[i] < pivot {
+        i += 1
+      }
+      while j >= i && a[j] > pivot {
+        j -= 1
+      }
+      if i >= j {
+        break
+      }
+      let t = a[i]
+      a[i] = a[j]
+      a[j] = t
+      i += 1
+      j -= 1
+    }
+    let t = a[i]
+    a[i] = a[hi]
+    a[hi] = t
+    if k == i {
+      return a[k]
+    } else if k < i {
+      hi = i - 1
+    } else {
+      lo = i + 1
+    }
   }
-  let mut sx = 0.0
-  let mut sy = 0.0
-  let mut sxx = 0.0
-  let mut sxy = 0.0
-  for i in 0..<n {
-    let x = xs[i]
-    let y = ys[i]
-    sx += x
-    sy += y
-    sxx += x * x
-    sxy += x * y
-  }
-  let nf = n.to_double()
-  let denom = nf * sxx - sx * sx
-  if @math.abs(denom) <= 1.0e-30 {
-    return Some((sy / nf, 0.0))
-  }
-  let b = (nf * sxy - sx * sy) / denom
-  let a = (sy - b * sx) / nf
-  Some((a, b))
+  a[k]
 }
 
 ///|
-fn median_abs(vals : Array[Double]) -> Double {
-  let n = vals.length()
+fn median_abs_buf(
+  vals : FixedArray[Double],
+  n : Int32,
+  scratch : FixedArray[Double],
+) -> Double {
   if n == 0 {
     return 0.0
   }
-  let copy : Array[Double] = []
-  for v in vals {
-    copy.push(@math.abs(v))
+  for i in 0..<n {
+    scratch[i] = @math.abs(vals[i])
   }
-  copy.sort_by(fn(a, b) { if a < b { -1 } else if a > b { 1 } else { 0 } })
+  let mid = n / 2
+  let hi_val = quickselect(scratch, n, mid)
   if n % 2 == 1 {
-    copy[n / 2]
+    hi_val
   } else {
-    0.5 * (copy[n / 2 - 1] + copy[n / 2])
+    let mut lo_val = scratch[0]
+    for i in 1..<mid {
+      if scratch[i] > lo_val {
+        lo_val = scratch[i]
+      }
+    }
+    0.5 * (lo_val + hi_val)
   }
 }
 
 ///|
-fn fit_linear_robust(
-  xs : Array[Double],
-  ys : Array[Double],
+fn fit_linear_precomputed(
+  xs : FixedArray[Double],
+  ys : FixedArray[Double],
+  n : Int32,
+  sx : Double,
+  ols_denom : Double,
+  robust : Bool,
+  res : FixedArray[Double],
+  scratch : FixedArray[Double],
 ) -> (Double, Double)? {
-  guard fit_linear_ols(xs, ys) is Some((a0, b0)) else { return None }
-  let n = xs.length()
-  let mut a = a0
-  let mut b = b0
-  let res : Array[Double] = Array::make(n, 0.0)
+  if n < 2 {
+    return None
+  }
+  let mut sy = 0.0
+  let mut sxy = 0.0
+  for i in 0..<n {
+    let y = ys[i]
+    sy += y
+    sxy += xs[i] * y
+  }
+  let nf = n.to_double()
+  let mut a = 0.0
+  let mut b = 0.0
+  if @math.abs(ols_denom) <= 1.0e-30 {
+    a = sy / nf
+    b = 0.0
+  } else {
+    b = (nf * sxy - sx * sy) / ols_denom
+    a = (sy - b * sx) / nf
+  }
+  if !robust {
+    return Some((a, b))
+  }
   for _ in 0..<5 {
     for i in 0..<n {
       res[i] = ys[i] - (a + b * xs[i])
     }
-    let mad = median_abs(res)
+    let mad = median_abs_buf(res, n, scratch)
     let scale = mad / 0.6745
     if scale <= 1.0e-9 {
       break
     }
-    let cutoff = 4.685 * scale
+    let inv_cutoff = 1.0 / (4.685 * scale)
     let mut sw = 0.0
     let mut swx = 0.0
     let mut swy = 0.0
     let mut swxx = 0.0
     let mut swxy = 0.0
     for i in 0..<n {
-      let u = @math.abs(res[i]) / cutoff
+      let u = @math.abs(res[i]) * inv_cutoff
       if u < 1.0 {
         let t = 1.0 - u * u
         let w = t * t
         let x = xs[i]
         let y = ys[i]
+        let wx = w * x
         sw += w
-        swx += w * x
+        swx += wx
         swy += w * y
-        swxx += w * x * x
-        swxy += w * x * y
+        swxx += wx * x
+        swxy += wx * y
       }
     }
     let denom = sw * swxx - swx * swx
@@ -251,43 +312,64 @@ fn fit_linear_robust(
 }
 
 ///|
-fn fit_cepstral_tilt(
-  db_col : FixedArray[Double],
-  q1 : Double,
-  dq : Double,
-  q_min : Double,
-  q_max : Double,
-  exponential_decay : Bool,
-  robust : Bool,
-) -> (Double, Double)? {
-  let nq = db_col.length()
-  let xs : Array[Double] = []
-  let ys : Array[Double] = []
-  for i in 0..<nq {
-    let q = q1 + i.to_double() * dq
-    if q >= q_min && q <= q_max {
-      if exponential_decay {
-        if q > 0.0 {
-          xs.push(@math.ln(q))
-          ys.push(db_col[i])
-        }
-      } else {
-        xs.push(q)
-        ys.push(db_col[i])
+/// Subtraction-free O(N) boxcar mean over `[max(0, i - half), min(n - 1, i + half)]`
+/// for a 1D slice. Uses a direct loop for small half-widths (`half <= 16`, the
+/// common CPPS case) and van Herk / Gil-Werman block prefix+suffix sums for
+/// larger windows, avoiding the catastrophic cancellation of cumulative
+/// prefix-sum subtraction when values span many orders of magnitude.
+fn boxcar_smooth_1d(
+  line : FixedArray[Double],
+  n : Int32,
+  half : Int32,
+  pref : FixedArray[Double],
+  suff : FixedArray[Double],
+  dst : FixedArray[Double],
+) -> Unit {
+  if half <= 16 {
+    for i in 0..<n {
+      let lo = if i - half < 0 { 0 } else { i - half }
+      let hi = if i + half >= n { n - 1 } else { i + half }
+      let mut sum = 0.0
+      for k in lo..<=hi {
+        sum += line[k]
       }
+      dst[i] = sum / (hi - lo + 1).to_double()
     }
+    return
   }
-  if robust {
-    fit_linear_robust(xs, ys)
-  } else {
-    fit_linear_ols(xs, ys)
+  let w = 2 * half + 1
+  for i in 0..<n {
+    pref[i] = if i % w == 0 { line[i] } else { pref[i - 1] + line[i] }
+  }
+  let mut i = n - 1
+  while i >= 0 {
+    suff[i] = if i == n - 1 || (i + 1) % w == 0 {
+      line[i]
+    } else {
+      suff[i + 1] + line[i]
+    }
+    i -= 1
+  }
+  for idx in 0..<n {
+    let lo = if idx - half < 0 { 0 } else { idx - half }
+    let hi = if idx + half >= n { n - 1 } else { idx + half }
+    let sum = if lo / w == hi / w {
+      if lo % w == 0 {
+        pref[hi]
+      } else {
+        suff[lo]
+      }
+    } else {
+      suff[lo] + pref[hi]
+    }
+    dst[idx] = sum / (hi - lo + 1).to_double()
   }
 }
 
 ///|
-/// Smooth a quefrency-major `PowerCepstrogram` grid in place along time
-/// (`time_half` frames) and quefrency (`q_half` bins) using a boxcar
-/// average matching Praat's `PowerCepstrogram_smooth`.
+/// Smooth a quefrency-major `PowerCepstrogram` grid along time
+/// (`time_half` frames) and quefrency (`q_half` bins) using subtraction-free
+/// boxcar averaging matching Praat's `PowerCepstrogram_smooth`.
 fn smooth_cepstral_grid(
   src : FixedArray[Double],
   nq : Int32,
@@ -298,16 +380,33 @@ fn smooth_cepstral_grid(
   let tmp : FixedArray[Double] = FixedArray::make(nq * nt, 0.0)
   let half_t = n_smooth_t / 2
   if half_t > 0 {
-    for q in 0..<nq {
-      let row = q * nt
-      for t in 0..<nt {
-        let lo = if t - half_t < 0 { 0 } else { t - half_t }
-        let hi = if t + half_t >= nt { nt - 1 } else { t + half_t }
-        let mut sum = 0.0
-        for k in lo..<=hi {
-          sum += src[row + k]
+    if half_t <= 16 {
+      for q in 0..<nq {
+        let row = q * nt
+        for t in 0..<nt {
+          let lo = if t - half_t < 0 { 0 } else { t - half_t }
+          let hi = if t + half_t >= nt { nt - 1 } else { t + half_t }
+          let mut sum = 0.0
+          for k in lo..<=hi {
+            sum += src[row + k]
+          }
+          tmp[row + t] = sum / (hi - lo + 1).to_double()
         }
-        tmp[row + t] = sum / (hi - lo + 1).to_double()
+      }
+    } else {
+      let line : FixedArray[Double] = FixedArray::make(nt, 0.0)
+      let pref : FixedArray[Double] = FixedArray::make(nt, 0.0)
+      let suff : FixedArray[Double] = FixedArray::make(nt, 0.0)
+      let dst : FixedArray[Double] = FixedArray::make(nt, 0.0)
+      for q in 0..<nq {
+        let row = q * nt
+        for t in 0..<nt {
+          line[t] = src[row + t]
+        }
+        boxcar_smooth_1d(line, nt, half_t, pref, suff, dst)
+        for t in 0..<nt {
+          tmp[row + t] = dst[t]
+        }
       }
     }
   } else {
@@ -320,15 +419,31 @@ fn smooth_cepstral_grid(
     return tmp
   }
   let out : FixedArray[Double] = FixedArray::make(nq * nt, 0.0)
+  let col : FixedArray[Double] = FixedArray::make(nq, 0.0)
+  let pref_q : FixedArray[Double] = FixedArray::make(
+    if half_q > 16 {
+      nq
+    } else {
+      0
+    },
+    0.0,
+  )
+  let suff_q : FixedArray[Double] = FixedArray::make(
+    if half_q > 16 {
+      nq
+    } else {
+      0
+    },
+    0.0,
+  )
+  let dst_q : FixedArray[Double] = FixedArray::make(nq, 0.0)
   for t in 0..<nt {
     for q in 0..<nq {
-      let lo = if q - half_q < 0 { 0 } else { q - half_q }
-      let hi = if q + half_q >= nq { nq - 1 } else { q + half_q }
-      let mut sum = 0.0
-      for k in lo..<=hi {
-        sum += tmp[k * nt + t]
-      }
-      out[q * nt + t] = sum / (hi - lo + 1).to_double()
+      col[q] = tmp[q * nt + t]
+    }
+    boxcar_smooth_1d(col, nq, half_q, pref_q, suff_q, dst_q)
+    for q in 0..<nq {
+      out[q * nt + t] = dst_q[q]
     }
   }
   out
@@ -371,33 +486,70 @@ pub fn cpps(
   }
   let exp_decay = line_type == "exponential_decay"
   let robust = fit_method != "least_squares"
+  // Precompute per-quefrency x values and fit indices once for all frames.
+  let q_x_all : FixedArray[Double] = FixedArray::make(nq, 0.0)
+  let q_valid_exp : FixedArray[Bool] = FixedArray::make(nq, false)
+  let fit_idx_arr : Array[Int32] = []
+  for q in 0..<nq {
+    let qv = cepstrogram.q1 + q.to_double() * cepstrogram.dq
+    if exp_decay {
+      if qv > 0.0 {
+        q_x_all[q] = @math.ln(qv)
+        q_valid_exp[q] = true
+      }
+    } else {
+      q_x_all[q] = qv
+      q_valid_exp[q] = true
+    }
+    if qv >= fit_q_min && qv <= fit_q_max && (!exp_decay || qv > 0.0) {
+      fit_idx_arr.push(q)
+    }
+  }
+  let n_fit = fit_idx_arr.length()
+  let fit_indices : FixedArray[Int32] = FixedArray::make(n_fit, 0)
+  let fit_xs : FixedArray[Double] = FixedArray::make(n_fit, 0.0)
+  let mut fit_sx = 0.0
+  let mut fit_sxx = 0.0
+  for i in 0..<n_fit {
+    let q = fit_idx_arr[i]
+    fit_indices[i] = q
+    let xv = q_x_all[q]
+    fit_xs[i] = xv
+    fit_sx += xv
+    fit_sxx += xv * xv
+  }
+  let ols_denom = n_fit.to_double() * fit_sxx - fit_sx * fit_sx
+  let fit_ys : FixedArray[Double] = FixedArray::make(n_fit, 0.0)
+  let fit_res : FixedArray[Double] = FixedArray::make(n_fit, 0.0)
+  let fit_scratch : FixedArray[Double] = FixedArray::make(n_fit, 0.0)
   let work : FixedArray[Double] = FixedArray::make(nq * nt, 0.0)
   for i in 0..<(nq * nt) {
     work[i] = cepstrogram.power[i]
   }
   let col_db : FixedArray[Double] = FixedArray::make(nq, 0.0)
+  let db_scale = 10.0 / @math.LN10
+  let inv_db_scale = @math.LN10 / 10.0
   if subtract_tilt_before_smoothing {
     for t in 0..<nt {
       for q in 0..<nq {
         let p = work[q * nt + t]
-        col_db[q] = 10.0 * @math.log10(if p > 1.0e-30 { p } else { 1.0e-30 })
+        col_db[q] = db_scale * @math.ln(if p > 1.0e-30 { p } else { 1.0e-30 })
       }
-      if fit_cepstral_tilt(
-          col_db,
-          cepstrogram.q1,
-          cepstrogram.dq,
-          fit_q_min,
-          fit_q_max,
-          exp_decay,
-          robust,
+      for i in 0..<n_fit {
+        fit_ys[i] = col_db[fit_indices[i]]
+      }
+      if fit_linear_precomputed(
+          fit_xs, fit_ys, n_fit, fit_sx, ols_denom, robust, fit_res, fit_scratch,
         )
         is Some((a, b)) {
         for q in 0..<nq {
-          let qv = cepstrogram.q1 + q.to_double() * cepstrogram.dq
-          let x = if exp_decay && qv > 0.0 { @math.ln(qv) } else { qv }
-          let trend = if exp_decay && qv <= 0.0 { a } else { a + b * x }
+          let trend = if exp_decay && !q_valid_exp[q] {
+            a
+          } else {
+            a + b * q_x_all[q]
+          }
           let detrended_db = col_db[q] - trend
-          work[q * nt + t] = @math.pow(10.0, detrended_db / 10.0)
+          work[q * nt + t] = @math.exp(detrended_db * inv_db_scale)
         }
       }
     }
@@ -436,16 +588,13 @@ pub fn cpps(
   for t in 0..<nt {
     for q in 0..<nq {
       let p = smoothed[q * nt + t]
-      col_db[q] = 10.0 * @math.log10(if p > 1.0e-30 { p } else { 1.0e-30 })
+      col_db[q] = db_scale * @math.ln(if p > 1.0e-30 { p } else { 1.0e-30 })
     }
-    guard fit_cepstral_tilt(
-        col_db,
-        cepstrogram.q1,
-        cepstrogram.dq,
-        fit_q_min,
-        fit_q_max,
-        exp_decay,
-        robust,
+    for i in 0..<n_fit {
+      fit_ys[i] = col_db[fit_indices[i]]
+    }
+    guard fit_linear_precomputed(
+        fit_xs, fit_ys, n_fit, fit_sx, ols_denom, robust, fit_res, fit_scratch,
       )
       is Some((a, b)) else {
       continue

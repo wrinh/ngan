@@ -7,6 +7,7 @@ import vm from 'node:vm';
 
 import {
   createNgan,
+  NganEngine,
   Float64RingBuffer,
   resampleSinc,
   getWorkletProcessorSource,
@@ -191,6 +192,38 @@ test('analyzeHarmonicity, analyzeSpectrogram, analyzeVoiceReport, analyzeSpectra
   assert.ok(sg.numberOfFrequencyBands > 0);
   const dbMatrix = spectrogramToDbMatrix(sg);
   assert.equal(dbMatrix.length, sg.numberOfFrequencyBands);
+
+  // Verify buffer-backed spectrogram/filterbank/cepstrogram readout matches legacy JSON exports exactly.
+  engine.writeSamples(sine1k);
+  const sgLegacy = JSON.parse(
+    engine.exports.analyze_spectrogram_json(fs, 0.005, 5000.0, 0.002, 20.0, 120),
+  );
+  assert.equal(sg.numberOfTimeFrames, sgLegacy.numberOfTimeFrames);
+  assert.equal(sg.numberOfFrequencyBands, sgLegacy.numberOfFrequencyBands);
+  assert.equal(sg.power.length, sgLegacy.power.length);
+  for (let i = 0; i < sg.power.length; i++) {
+    assert.ok(Math.abs(sg.power[i] - sgLegacy.power[i]) <= 1e-12 * Math.max(1, sgLegacy.power[i]));
+  }
+
+  // Verify graceful fallback to legacy *_json exports when an older WASM binary lacks *_meta_json.
+  const legacyExports = { ...engine.exports };
+  delete legacyExports.analyze_spectrogram_meta_json;
+  delete legacyExports.analyze_cepstrogram_cpps_meta_json;
+  delete legacyExports.analyze_filterbank_spectrogram_meta_json;
+  delete legacyExports.out_matrix_len;
+  delete legacyExports.get_out_matrix;
+  const legacyEngine = new NganEngine(legacyExports);
+  const sgFallback = legacyEngine.analyzeSpectrogram(sine1k, fs, { maxTimeColumns: 120 });
+  assert.equal(sgFallback.power.length, sg.power.length);
+  const cppsFallback = legacyEngine.analyzeCpps(vowel, fs, {
+    includeCepstrogram: true,
+    maxTimeColumns: 100,
+  });
+  assert.ok(cppsFallback.cppsDb !== null && cppsFallback.cepstrogram !== null);
+  const melFallback = legacyEngine.analyzeMelSpectrogram(sine1k, fs, { maxTimeColumns: 80 });
+  assert.ok(melFallback.values.length > 0);
+  const barkFallback = legacyEngine.analyzeBarkSpectrogram(sine1k, fs, { maxTimeColumns: 80 });
+  assert.ok(barkFallback.values.length > 0);
 
   const spectral = engine.analyzeSpectral(sine1k, fs);
   assert.ok(spectral.centerOfGravityHz !== null);

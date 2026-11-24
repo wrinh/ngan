@@ -8,6 +8,8 @@ pub fn burg_lpc(FixedArray[Double], order~ : Int32) -> FixedArray[Double]
 
 pub fn cross_correlation_fft(FftPlan, FixedArray[Double], Int32, FixedArray[Double], Int32, FixedArray[Double], max_lag~ : Int32) -> Unit
 
+pub fn cross_correlation_fft_buf(FftPlan, FixedArray[Double], Int32, FixedArray[Double], Int32, FixedArray[Double], max_lag~ : Int32, FixedArray[Double], FixedArray[Double]) -> Unit
+
 pub fn gaussian_window(Int32) -> FixedArray[Double]
 
 pub fn hanning_window(Int32) -> FixedArray[Double]
@@ -29,6 +31,21 @@ pub struct FftPlan {
 }
 pub fn FftPlan::new(Int32) -> Self
 pub fn FftPlan::transform(Self, FixedArray[Double], FixedArray[Double], inverse~ : Bool) -> Unit
+
+pub struct RealFftPlan {
+  n : Int32
+  half : Int32
+  half_plan : FftPlan
+  cos_u : FixedArray[Double]
+  sin_u : FixedArray[Double]
+  buf_re : FixedArray[Double]
+  buf_im : FixedArray[Double]
+}
+pub fn RealFftPlan::autocorrelation(Self, FixedArray[Double], Int32, FixedArray[Double], max_lag~ : Int32, FixedArray[Double]) -> Unit
+pub fn RealFftPlan::filter_real(Self, FixedArray[Double], Int32, FixedArray[Double], FixedArray[Double]) -> Unit
+pub fn RealFftPlan::forward_power(Self, FixedArray[Double], Int32, FixedArray[Double]) -> Unit
+pub fn RealFftPlan::inverse_real_even(Self, FixedArray[Double], FixedArray[Double], Int32) -> Unit
+pub fn RealFftPlan::new(Int32) -> Self
 
 // Type aliases
 

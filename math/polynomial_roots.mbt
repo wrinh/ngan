@@ -31,46 +31,74 @@ pub fn poly_roots(coeffs : FixedArray[Double]) -> Array[Complex] {
     roots.push({ re: -c[0], im: 0.0, })
     return roots
   }
-  fn eval_at(z : Complex) -> Complex {
-    let mut acc : Complex = { re: 1.0, im: 0.0, }
-    for k in 0..<deg {
-      acc = acc.mul(z).add({ re: c[deg - 1 - k], im: 0.0, })
-    }
-    acc
-  }
-  // Initial guesses (0.4 + 0.9i)^k for k = 0 .. deg-1.
-  let base : Complex = { re: 0.4, im: 0.9, }
-  let mut g : Complex = { re: 1.0, im: 0.0, }
-  for _ in 0..<deg {
-    roots.push(g)
-    g = g.mul(base)
+  // Unpacked real/imag arrays avoid allocating Complex structs per iteration.
+  let r_re : FixedArray[Double] = FixedArray::make(deg, 0.0)
+  let r_im : FixedArray[Double] = FixedArray::make(deg, 0.0)
+  let mut gr = 1.0
+  let mut gi = 0.0
+  for k in 0..<deg {
+    r_re[k] = gr
+    r_im[k] = gi
+    let ngr = gr * 0.4 - gi * 0.9
+    let ngi = gr * 0.9 + gi * 0.4
+    gr = ngr
+    gi = ngi
   }
   for _ in 0..<200 {
-    let mut max_delta = 0.0
+    let mut max_delta_sq = 0.0
     for i in 0..<deg {
-      let z = roots[i]
+      let zr = r_re[i]
+      let zi = r_im[i]
       // denominator: product of (z - roots[j]) for j != i
-      let mut den : Complex = { re: 1.0, im: 0.0, }
+      let mut dr = 1.0
+      let mut di = 0.0
       let mut singular = false
       for j in 0..<deg {
         if j != i {
-          let diff = z.sub(roots[j])
-          if diff.abs() < 1.0e-300 {
+          let xr = zr - r_re[j]
+          let xi = zi - r_im[j]
+          if xr * xr + xi * xi < 1.0e-300 {
             singular = true
             break
           }
-          den = den.mul(diff)
+          let ndr = dr * xr - di * xi
+          let ndi = dr * xi + di * xr
+          dr = ndr
+          di = ndi
         }
       }
       if !singular {
-        let dz = eval_at(z).div(den)
-        max_delta = dmax(max_delta, dz.abs())
-        roots[i] = z.sub(dz)
+        let den_sq = dr * dr + di * di
+        if den_sq > 1.0e-300 {
+          // Horner evaluation of monic p(z).
+          let mut pr = 1.0
+          let mut pi = 0.0
+          let mut k = deg - 1
+          while k >= 0 {
+            let npr = pr * zr - pi * zi + c[k]
+            let npi = pr * zi + pi * zr
+            pr = npr
+            pi = npi
+            k -= 1
+          }
+          let inv_den = 1.0 / den_sq
+          let dzr = (pr * dr + pi * di) * inv_den
+          let dzi = (pi * dr - pr * di) * inv_den
+          let dsq = dzr * dzr + dzi * dzi
+          if dsq > max_delta_sq {
+            max_delta_sq = dsq
+          }
+          r_re[i] = zr - dzr
+          r_im[i] = zi - dzi
+        }
       }
     }
-    if max_delta < 1.0e-13 {
+    if max_delta_sq < 1.0e-26 {
       break
     }
+  }
+  for k in 0..<deg {
+    roots.push({ re: r_re[k], im: r_im[k], })
   }
   roots
 }

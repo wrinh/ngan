@@ -458,7 +458,7 @@ pub fn voice_report(
   let pt = if use_filtered_ac {
     pitch_filtered_ac(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
   } else {
-    pitch(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
+    pitch_ac(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
   }
   let pp = sound_and_pitch_to_point_process_cc(samples, sample_rate~, pitch=pt)
   let vb = voice_breaks(

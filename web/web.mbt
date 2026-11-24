@@ -8,6 +8,7 @@
 priv struct WasmState {
   mut samples : FixedArray[Double]
   mut out_samples : FixedArray[Double]
+  mut out_matrix : FixedArray[Double]
   mut ring : FixedArray[Double]
   mut ring_head : Int32
   mut ring_count : Int32
@@ -18,6 +19,7 @@ priv struct WasmState {
 let state : WasmState = {
   samples: FixedArray::make(0, 0.0),
   out_samples: FixedArray::make(0, 0.0),
+  out_matrix: FixedArray::make(0, 0.0),
   ring: FixedArray::make(0, 0.0),
   ring_head: 0,
   ring_count: 0,
@@ -136,6 +138,22 @@ pub fn out_samples_len() -> Int32 {
 pub fn get_out_sample(index : Int32) -> Double {
   if index >= 0 && index < state.out_samples.length() {
     state.out_samples[index]
+  } else {
+    0.0
+  }
+}
+
+///|
+/// Return the length of the active matrix readout buffer (`state.out_matrix`).
+pub fn out_matrix_len() -> Int32 {
+  state.out_matrix.length()
+}
+
+///|
+/// Read a single value from `state.out_matrix` at `index`.
+pub fn get_out_matrix(index : Int32) -> Double {
+  if index >= 0 && index < state.out_matrix.length() {
+    state.out_matrix[index]
   } else {
     0.0
   }
@@ -292,7 +310,7 @@ pub fn analyze_pitch_json(
       voiced_unvoiced_cost~,
     )
   } else {
-    @ngan.pitch(
+    @ngan.pitch_ac(
       state.samples,
       sample_rate=fs,
       time_step~,
@@ -441,17 +459,14 @@ pub fn analyze_harmonicity_json(
 }
 
 ///|
-/// Run Praat `To Spectrogram...` on the active sample buffer, optionally
-/// stride-averaging linear power along the time axis when `max_time_columns > 0`,
-/// and return band-major JSON.
-pub fn analyze_spectrogram_json(
+fn compute_spectrogram_output(
   fs : Double,
   window_length : Double,
   maximum_frequency : Double,
   time_step : Double,
   frequency_step : Double,
   max_time_columns : Int32,
-) -> String {
+) -> (Double, Double, Int32, Double, Double, Int32, Double, FixedArray[Double]) {
   let sg = @ngan.spectrogram(
     state.samples,
     sample_rate=fs,
@@ -470,29 +485,95 @@ pub fn analyze_spectrogram_json(
   }
   let nt_out = if nt > 0 { (nt - 1) / stride + 1 } else { 0 }
   let total_out = nf * nt_out
-  let out_power = FixedArray::make(total_out, 0.0)
   let mut max_p = 0.0
-  for band in 0..<nf {
-    for col in 0..<nt_out {
-      let f_start = col * stride
-      let f_end = if f_start + stride < nt { f_start + stride } else { nt }
-      let span = (f_end - f_start).to_double()
-      let mut sum = 0.0
-      for fr in f_start..<f_end {
-        sum += sg.power[band * nt + fr]
-      }
-      let p = if span > 0.0 { sum / span } else { 0.0 }
-      out_power[band * nt_out + col] = p
+  let out_power : FixedArray[Double] = if stride == 1 {
+    for i in 0..<total_out {
+      let p = sg.power[i]
       if p > max_p {
         max_p = p
       }
     }
+    sg.power
+  } else {
+    let buf = FixedArray::make(total_out, 0.0)
+    for band in 0..<nf {
+      let src_row = band * nt
+      let dst_row = band * nt_out
+      for col in 0..<nt_out {
+        let f_start = col * stride
+        let f_end = if f_start + stride < nt { f_start + stride } else { nt }
+        let span = (f_end - f_start).to_double()
+        let mut sum = 0.0
+        for fr in f_start..<f_end {
+          sum += sg.power[src_row + fr]
+        }
+        let p = if span > 0.0 { sum / span } else { 0.0 }
+        buf[dst_row + col] = p
+        if p > max_p {
+          max_p = p
+        }
+      }
+    }
+    buf
   }
+  (
+    sg.t1,
+    sg.dt * stride.to_double(),
+    nt_out,
+    sg.f1,
+    sg.df,
+    nf,
+    max_p,
+    out_power,
+  )
+}
+
+///|
+/// Run Praat `To Spectrogram...` on the active sample buffer, storing the
+/// band-major power values in `state.out_matrix` (avoiding JSON serialization
+/// of hundreds of thousands of floats) and returning only the metadata JSON.
+pub fn analyze_spectrogram_meta_json(
+  fs : Double,
+  window_length : Double,
+  maximum_frequency : Double,
+  time_step : Double,
+  frequency_step : Double,
+  max_time_columns : Int32,
+) -> String {
+  let (t1, dt, nt_out, f1, df, nf, max_p, out_power) = compute_spectrogram_output(
+    fs, window_length, maximum_frequency, time_step, frequency_step, max_time_columns,
+  )
+  state.out_matrix = out_power
   let sb = StringBuilder()
   sb <+
-    "{\"t1\": \{fmt_num(sg.t1)}, \"dt\": \{fmt_num(sg.dt * stride.to_double())}, \"numberOfTimeFrames\": \{nt_out}"
+    "{\"t1\": \{fmt_num(t1)}, \"dt\": \{fmt_num(dt)}, \"numberOfTimeFrames\": \{nt_out}"
   sb <+
-    ", \"f1\": \{fmt_num(sg.f1)}, \"df\": \{fmt_num(sg.df)}, \"numberOfFrequencyBands\": \{nf}"
+    ", \"f1\": \{fmt_num(f1)}, \"df\": \{fmt_num(df)}, \"numberOfFrequencyBands\": \{nf}"
+  sb <+ ", \"maxPower\": \{fmt_num(max_p)}}"
+  sb.to_string()
+}
+
+///|
+/// Run Praat `To Spectrogram...` on the active sample buffer, optionally
+/// stride-averaging linear power along the time axis when `max_time_columns > 0`,
+/// and return band-major JSON.
+pub fn analyze_spectrogram_json(
+  fs : Double,
+  window_length : Double,
+  maximum_frequency : Double,
+  time_step : Double,
+  frequency_step : Double,
+  max_time_columns : Int32,
+) -> String {
+  let (t1, dt, nt_out, f1, df, nf, max_p, out_power) = compute_spectrogram_output(
+    fs, window_length, maximum_frequency, time_step, frequency_step, max_time_columns,
+  )
+  let total_out = nf * nt_out
+  let sb = StringBuilder()
+  sb <+
+    "{\"t1\": \{fmt_num(t1)}, \"dt\": \{fmt_num(dt)}, \"numberOfTimeFrames\": \{nt_out}"
+  sb <+
+    ", \"f1\": \{fmt_num(f1)}, \"df\": \{fmt_num(df)}, \"numberOfFrequencyBands\": \{nf}"
   sb <+ ", \"maxPower\": \{fmt_num(max_p)}, \"power\": ["
   for i in 0..<total_out {
     if i > 0 {
@@ -541,6 +622,98 @@ pub fn analyze_voice_report_json(
     ", \"jitter\": {\"localRel\": \{fmt_opt_double(vr.jitter.local_rel)}, \"localAbs\": \{fmt_opt_double(vr.jitter.local_abs)}, \"rap\": \{fmt_opt_double(vr.jitter.rap)}, \"ppq5\": \{fmt_opt_double(vr.jitter.ppq5)}, \"ddp\": \{fmt_opt_double(vr.jitter.ddp)}}"
   sb <+
     ", \"shimmer\": {\"localRel\": \{fmt_opt_double(vr.shimmer.local_rel)}, \"localDb\": \{fmt_opt_double(vr.shimmer.local_db)}, \"apq3\": \{fmt_opt_double(vr.shimmer.apq3)}, \"apq5\": \{fmt_opt_double(vr.shimmer.apq5)}, \"apq11\": \{fmt_opt_double(vr.shimmer.apq11)}, \"dda\": \{fmt_opt_double(vr.shimmer.dda)}}"
+  sb <+ "}"
+  sb.to_string()
+}
+
+///|
+/// Run Praat `To PowerCepstrogram...` and `Get CPPS...` on the active sample
+/// buffer, storing the optional cepstrogram power matrix in `state.out_matrix`
+/// and returning metadata JSON without serializing the float grid to JSON.
+pub fn analyze_cepstrogram_cpps_meta_json(
+  fs : Double,
+  pitch_floor : Double,
+  time_step : Double,
+  maximum_frequency : Double,
+  pre_emphasis_from : Double,
+  subtract_tilt_before_smoothing : Int32,
+  time_averaging_window : Double,
+  quefrency_averaging_window : Double,
+  peak_search_pitch_floor : Double,
+  peak_search_pitch_ceiling : Double,
+  include_cepstrogram : Int32,
+  max_time_columns : Int32,
+) -> String {
+  let pc = @ngan.power_cepstrogram(
+    state.samples,
+    sample_rate=fs,
+    pitch_floor~,
+    time_step~,
+    maximum_frequency~,
+    pre_emphasis_from~,
+  )
+  let cpps_val = @ngan.cpps(
+    pc,
+    subtract_tilt_before_smoothing=subtract_tilt_before_smoothing != 0,
+    time_averaging_window~,
+    quefrency_averaging_window~,
+    peak_search_pitch_floor~,
+    peak_search_pitch_ceiling~,
+  )
+  let sb = StringBuilder()
+  sb <+ "{\"cppsDb\": \{fmt_opt_double(cpps_val)}, \"cepstrogram\": "
+  if include_cepstrogram != 0 {
+    let nt = pc.number_of_time_frames
+    let nq = pc.number_of_quefrency_bins
+    let mut stride = 1
+    if max_time_columns > 0 {
+      while nt > max_time_columns * stride {
+        stride *= 2
+      }
+    }
+    let nt_out = if nt > 0 { (nt - 1) / stride + 1 } else { 0 }
+    let total_out = nq * nt_out
+    let mut max_p = 0.0
+    let out_power : FixedArray[Double] = if stride == 1 {
+      for i in 0..<total_out {
+        let p = pc.power[i]
+        if p > max_p {
+          max_p = p
+        }
+      }
+      pc.power
+    } else {
+      let buf = FixedArray::make(total_out, 0.0)
+      for q in 0..<nq {
+        let src_row = q * nt
+        let dst_row = q * nt_out
+        for col in 0..<nt_out {
+          let f_start = col * stride
+          let f_end = if f_start + stride < nt { f_start + stride } else { nt }
+          let span = (f_end - f_start).to_double()
+          let mut sum = 0.0
+          for fr in f_start..<f_end {
+            sum += pc.power[src_row + fr]
+          }
+          let p = if span > 0.0 { sum / span } else { 0.0 }
+          buf[dst_row + col] = p
+          if p > max_p {
+            max_p = p
+          }
+        }
+      }
+      buf
+    }
+    state.out_matrix = out_power
+    sb <+
+      "{\"t1\": \{fmt_num(pc.t1)}, \"dt\": \{fmt_num(pc.dt * stride.to_double())}, \"numberOfTimeFrames\": \{nt_out}"
+    sb <+
+      ", \"q1\": \{fmt_num(pc.q1)}, \"dq\": \{fmt_num(pc.dq)}, \"numberOfQuefrencyBins\": \{nq}"
+    sb <+ ", \"maxPower\": \{fmt_num(max_p)}}"
+  } else {
+    state.out_matrix = FixedArray::make(0, 0.0)
+    sb <+ "null"
+  }
   sb <+ "}"
   sb.to_string()
 }
@@ -667,6 +840,88 @@ pub fn analyze_mfcc_json(
     sb <+ "]}"
   }
   sb <+ "]}"
+  sb.to_string()
+}
+
+///|
+/// Run Praat `To MelSpectrogram...` (`use_bark == 0`) or
+/// `To BarkSpectrogram...` (`use_bark != 0`) on the active sample buffer,
+/// storing the matrix values in `state.out_matrix` and returning metadata JSON.
+pub fn analyze_filterbank_spectrogram_meta_json(
+  fs : Double,
+  use_bark : Int32,
+  window_length : Double,
+  time_step : Double,
+  position_of_first_filter : Double,
+  distance_between_filters : Double,
+  maximum_frequency : Double,
+  max_time_columns : Int32,
+) -> String {
+  let fb = if use_bark != 0 {
+    @ngan.bark_spectrogram(
+      state.samples,
+      sample_rate=fs,
+      window_length~,
+      time_step~,
+      position_of_first_filter~,
+      distance_between_filters~,
+      maximum_frequency~,
+    )
+  } else {
+    @ngan.mel_spectrogram(
+      state.samples,
+      sample_rate=fs,
+      window_length~,
+      time_step~,
+      position_of_first_filter~,
+      distance_between_filters~,
+      maximum_frequency~,
+    )
+  }
+  let nt = fb.number_of_time_frames
+  let nf = fb.number_of_filters
+  let mut stride = 1
+  if max_time_columns > 0 {
+    while nt > max_time_columns * stride {
+      stride *= 2
+    }
+  }
+  let nt_out = if nt > 0 { (nt - 1) / stride + 1 } else { 0 }
+  let total_out = nf * nt_out
+  let out_vals : FixedArray[Double] = if stride == 1 {
+    fb.values
+  } else {
+    let buf = FixedArray::make(total_out, -300.0)
+    let inv_db = @math.LN10 / 10.0
+    let db_scale = 10.0 / @math.LN10
+    for b in 0..<nf {
+      let src_row = b * nt
+      let dst_row = b * nt_out
+      for col in 0..<nt_out {
+        let f_start = col * stride
+        let f_end = if f_start + stride < nt { f_start + stride } else { nt }
+        let span = (f_end - f_start).to_double()
+        let mut sum_e = 0.0
+        for fr in f_start..<f_end {
+          sum_e += @math.exp(fb.values[src_row + fr] * inv_db)
+        }
+        let mean_e = if span > 0.0 { sum_e / span } else { 0.0 }
+        buf[dst_row + col] = if mean_e <= 1.0e-30 {
+          -300.0
+        } else {
+          db_scale * @math.ln(mean_e)
+        }
+      }
+    }
+    buf
+  }
+  state.out_matrix = out_vals
+  let scale_name = if use_bark != 0 { "bark" } else { "mel" }
+  let sb = StringBuilder()
+  sb <+
+    "{\"scale\": \"\{scale_name}\", \"t1\": \{fmt_num(fb.t1)}, \"dt\": \{fmt_num(fb.dt * stride.to_double())}, \"numberOfTimeFrames\": \{nt_out}"
+  sb <+
+    ", \"f1\": \{fmt_num(fb.f1)}, \"df\": \{fmt_num(fb.df)}, \"numberOfFilters\": \{nf}}"
   sb.to_string()
 }
 
@@ -947,7 +1202,7 @@ pub fn ring_analyze_frame_json(
   }
   let rms = (sum_sq / n.to_double()).sqrt()
   let it = @ngan.intensity(state.samples, sample_rate=fs, min_pitch~)
-  let pt = @ngan.pitch(
+  let pt = @ngan.pitch_ac(
     state.samples,
     sample_rate=fs,
     pitch_floor~,
@@ -1019,7 +1274,7 @@ fn parse_samples(csv : String) -> FixedArray[Double] {
 pub fn analyze_csv(samples_csv : String, fs : Double) -> String {
   let samples = parse_samples(samples_csv)
   let it = @ngan.intensity(samples, sample_rate=fs)
-  let pt = @ngan.pitch(samples, sample_rate=fs)
+  let pt = @ngan.pitch_ac(samples, sample_rate=fs)
   let ft = @ngan.formants(samples, sample_rate=fs)
   let sg = @ngan.spectrogram(samples, sample_rate=fs)
   let sb = StringBuilder()

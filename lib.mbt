@@ -10,7 +10,7 @@
 //
 // Map to Praat commands:
 // - `intensity`          <-> `To Intensity...`
-// - `pitch`              <-> `To Pitch (ac)...`
+// - `pitch_ac`           <-> `To Pitch (ac)...`
 // - `pitch_cc`           <-> `To Pitch (cc)...`
 // - `pitch_filtered_ac`  <-> `To Pitch (filtered ac)...`
 // - `harmonicity_ac`     <-> `To Harmonicity (ac)...`
@@ -79,7 +79,7 @@ pub using @textgrid {parse_textgrid, to_textgrid_string}
 ///|
 pub using @analysis {
   intensity,
-  pitch,
+  pitch_ac,
   pitch_cc,
   pitch_filtered_ac,
   harmonicity_ac,
@@ -133,7 +133,7 @@ pub fn analyze_pitch(
   pitch_floor : Double,
   pitch_ceiling : Double,
 ) -> @types.PitchTier {
-  @analysis.pitch(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
+  @analysis.pitch_ac(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
 }
 
 ///|

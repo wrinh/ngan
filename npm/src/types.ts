@@ -557,6 +557,8 @@ export interface NganWasmExports extends WebAssembly.Exports {
   samples_len(): number;
   out_samples_len(): number;
   get_out_sample(index: number): number;
+  out_matrix_len(): number;
+  get_out_matrix(index: number): number;
   ring_reset(capacity: number): number;
   ring_push(sample: number): void;
   ring_len(): number;
@@ -619,6 +621,14 @@ export interface NganWasmExports extends WebAssembly.Exports {
     periodsPerWindow: number,
     useCc: number,
   ): string;
+  analyze_spectrogram_meta_json(
+    fs: number,
+    windowLength: number,
+    maximumFrequency: number,
+    timeStep: number,
+    frequencyStep: number,
+    maxTimeColumns: number,
+  ): string;
   analyze_spectrogram_json(
     fs: number,
     windowLength: number,
@@ -633,6 +643,20 @@ export interface NganWasmExports extends WebAssembly.Exports {
     pitchCeiling: number,
     maxPeriodFactor: number,
     maxAmplitudeFactor: number,
+  ): string;
+  analyze_cepstrogram_cpps_meta_json(
+    fs: number,
+    pitchFloor: number,
+    timeStep: number,
+    maximumFrequency: number,
+    preEmphasisFrom: number,
+    subtractTiltBeforeSmoothing: number,
+    timeAveragingWindow: number,
+    quefrencyAveragingWindow: number,
+    peakSearchPitchFloor: number,
+    peakSearchPitchCeiling: number,
+    includeCepstrogram: number,
+    maxTimeColumns: number,
   ): string;
   analyze_cepstrogram_cpps_json(
     fs: number,
@@ -656,6 +680,16 @@ export interface NganWasmExports extends WebAssembly.Exports {
     positionOfFirstFilter: number,
     distanceBetweenFilters: number,
     maximumFrequency: number,
+  ): string;
+  analyze_filterbank_spectrogram_meta_json(
+    fs: number,
+    useBark: number,
+    windowLength: number,
+    timeStep: number,
+    positionOfFirstFilter: number,
+    distanceBetweenFilters: number,
+    maximumFrequency: number,
+    maxTimeColumns: number,
   ): string;
   analyze_filterbank_spectrogram_json(
     fs: number,

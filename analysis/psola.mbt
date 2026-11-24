@@ -17,7 +17,7 @@ pub fn to_manipulation(
 ) -> @types.Manipulation {
   let nx = samples.length()
   let dur = if sample_rate > 0.0 { nx.to_double() / sample_rate } else { 0.0 }
-  let pt = pitch(
+  let pt = pitch_ac(
     samples,
     sample_rate~,
     time_step~,
@@ -231,15 +231,53 @@ fn ola_hanning_grain(
   if i_hi >= n_out {
     i_hi = n_out - 1
   }
-  for idx in i_lo..<=i_hi {
-    let t_sample_syn = (idx.to_double() + 0.5) / sample_rate
-    let offset = t_sample_syn - t_syn
-    let rel = offset / half_w
-    if rel > -1.0 && rel < 1.0 {
-      let w = 0.5 * (1.0 + @math.cos(@math.PI * rel))
-      let v = sample_linear(samples, nx, sample_rate, t_src + offset)
-      out[idx] += v * w
-      w_acc[idx] += w
+  if i_hi < i_lo {
+    return
+  }
+  let inv_fs = 1.0 / sample_rate
+  let inv_hw = 1.0 / half_w
+  let d_rel = inv_fs * inv_hw
+  let d_angle = @math.PI * d_rel
+  let cs = @math.cos(d_angle)
+  let sn = @math.sin(d_angle)
+  let mut rel = ((i_lo.to_double() + 0.5) * inv_fs - t_syn) * inv_hw
+  let angle0 = @math.PI * rel
+  let mut c = @math.cos(angle0)
+  let mut s = @math.sin(angle0)
+  // Source sample index offset is constant across the entire grain:
+  // rf(idx) = (t_src - t_syn) * fs + idx.
+  let shift = (t_src - t_syn) * sample_rate
+  let base_off = @math.floor_int(shift)
+  let frac = shift - base_off.to_double()
+  let interior = i_lo + base_off >= 0 && i_hi + base_off + 1 < nx
+  if interior {
+    for idx in i_lo..<=i_hi {
+      if rel > -1.0 && rel < 1.0 {
+        let w = 0.5 * (1.0 + c)
+        let s0 = idx + base_off
+        let v0 = samples[s0]
+        let v = v0 + frac * (samples[s0 + 1] - v0)
+        out[idx] += v * w
+        w_acc[idx] += w
+      }
+      rel += d_rel
+      let nc = c * cs - s * sn
+      s = s * cs + c * sn
+      c = nc
+    }
+  } else {
+    for idx in i_lo..<=i_hi {
+      if rel > -1.0 && rel < 1.0 {
+        let w = 0.5 * (1.0 + c)
+        let offset = (idx.to_double() + 0.5) * inv_fs - t_syn
+        let v = sample_linear(samples, nx, sample_rate, t_src + offset)
+        out[idx] += v * w
+        w_acc[idx] += w
+      }
+      rel += d_rel
+      let nc = c * cs - s * sn
+      s = s * cs + c * sn
+      c = nc
     }
   }
 }
@@ -507,7 +545,7 @@ pub fn resynthesize_psola(
   if samples.length() == 0 || sample_rate <= 0.0 {
     return FixedArray::make(0, 0.0)
   }
-  let pt = pitch(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
+  let pt = pitch_ac(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
   let pp = sound_and_pitch_to_point_process_cc(samples, sample_rate~, pitch=pt)
   let p_arr : Array[@types.PitchPoint] = []
   for p in pitch_points {

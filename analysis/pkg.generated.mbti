@@ -32,7 +32,7 @@ pub fn mel_spectrogram_to_mfcc(@types.FilterBankMatrix, number_of_coefficients? 
 
 pub fn mfcc(FixedArray[Double], sample_rate~ : Double, number_of_coefficients? : Int32, window_length? : Double, time_step? : Double, position_of_first_filter? : Double, distance_between_filters? : Double, maximum_frequency? : Double) -> @types.Mfcc
 
-pub fn pitch(FixedArray[Double], sample_rate~ : Double, time_step? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_candidates? : Int32, voicing_threshold? : Double, silence_threshold? : Double, octave_cost? : Double, octave_jump_cost? : Double, voiced_unvoiced_cost? : Double) -> @types.PitchTier
+pub fn pitch_ac(FixedArray[Double], sample_rate~ : Double, time_step? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_candidates? : Int32, voicing_threshold? : Double, silence_threshold? : Double, octave_cost? : Double, octave_jump_cost? : Double, voiced_unvoiced_cost? : Double) -> @types.PitchTier
 
 pub fn pitch_cc(FixedArray[Double], sample_rate~ : Double, time_step? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_candidates? : Int32, voicing_threshold? : Double, silence_threshold? : Double, octave_cost? : Double, octave_jump_cost? : Double, voiced_unvoiced_cost? : Double) -> @types.PitchTier
 

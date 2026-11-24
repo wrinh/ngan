@@ -117,3 +117,29 @@ test "spectrogram grid values are positive for a chirp-free signal" {
   assert_true(p300 > 20.0 * pmid)
   assert_true(p2500 > 5.0 * pmid)
 }
+
+///|
+test "spectrogram handles minimal 2-sample window without RealFftPlan OOB" {
+  // Regression test: previously nfft=2 allocated pw of length 2 while
+  // RealFftPlan::new(4) wrote index 2, panicking out-of-bounds.
+  let fs = 1000.0
+  let x : FixedArray[Double] = FixedArray::make(20, 0.0)
+  for i in 0..<20 {
+    x[i] = @math.sin(2.0 * @math.PI * 100.0 * i.to_double() / fs)
+  }
+  let sg = spectrogram(
+    x,
+    sample_rate=fs,
+    window_length=0.002,
+    maximum_frequency=500.0,
+    time_step=0.002,
+    frequency_step=400.0,
+  )
+  assert_true(sg.number_of_time_frames > 0)
+  assert_true(sg.number_of_frequency_bands > 0)
+  assert_eq(
+    sg.power.length(),
+    sg.number_of_time_frames * sg.number_of_frequency_bands,
+  )
+  assert_true(sg.max_power() > 0.0)
+}

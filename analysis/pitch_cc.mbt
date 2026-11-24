@@ -96,6 +96,8 @@ fn pitch_cc_core(
   }
   let nfft = @dsp.next_pow2(m_len)
   let plan = @dsp.FftPlan::new(nfft)
+  let fft_re : FixedArray[Double] = FixedArray::make(nfft, 0.0)
+  let fft_im : FixedArray[Double] = FixedArray::make(nfft, 0.0)
   let u : FixedArray[Double] = FixedArray::make(n_tpl, 0.0)
   let v : FixedArray[Double] = FixedArray::make(m_len, 0.0)
   let sq : FixedArray[Double] = FixedArray::make(m_len + 1, 0.0)
@@ -103,24 +105,29 @@ fn pitch_cc_core(
   let rx : FixedArray[Double] = FixedArray::make(max_r_lag + 1, 0.0)
   let all_cands : Array[Array[PitchCand]] = []
   let all_unvoiced : FixedArray[Double] = FixedArray::make(nframes, 0.0)
+  let keep_limit = if octave_jump_cost == 0.0 && voiced_unvoiced_cost == 0.0 {
+    1
+  } else {
+    maxn - 1
+  }
   for fi in 0..<nframes {
     let t = t1 + fi.to_double() * dt
     let lo = low_index(t, sample_rate)
     // Local mean over one longest period on both sides.
-    let m_start = lo + 1 - nsamp_period
-    let m_end = lo + nsamp_period
-    let mut mean = 0.0
-    let mut mcount = 0
-    let mut j = m_start
-    while j <= m_end {
-      if j >= 0 && j < nx {
-        mean += samples[j]
-        mcount += 1
-      }
-      j += 1
+    let mut m_start = lo + 1 - nsamp_period
+    let mut m_end = lo + nsamp_period
+    if m_start < 0 {
+      m_start = 0
     }
-    if mcount > 0 {
-      mean /= mcount.to_double()
+    if m_end >= nx {
+      m_end = nx - 1
+    }
+    let mut mean = 0.0
+    if m_end >= m_start {
+      for j in m_start..<=m_end {
+        mean += samples[j]
+      }
+      mean /= (m_end - m_start + 1).to_double()
     }
     // Local peak around the frame centre (for the silence threshold).
     let mut p_start = lo + 1 - halfnsamp_period
@@ -132,13 +139,11 @@ fn pitch_cc_core(
       p_end = nx - 1
     }
     let mut local_peak = 0.0
-    j = p_start
-    while j <= p_end {
+    for j in p_start..<=p_end {
       let val = @math.abs(samples[j] - mean)
       if val > local_peak {
         local_peak = val
       }
-      j += 1
     }
     let frame_intensity = if local_peak > global_peak {
       1.0
@@ -160,24 +165,43 @@ fn pitch_cc_core(
     // Fill signal window and prefix-sum of squares.
     let start = lo + 1 - (n_tpl + maximum_lag) / 2
     sq[0] = 0.0
-    for k in 0..<m_len {
-      let idx = start + k
-      let val = if idx >= 0 && idx < nx { samples[idx] - mean } else { 0.0 }
-      v[k] = val
-      sq[k + 1] = sq[k] + val * val
+    if start >= 0 && start + m_len <= nx {
+      for k in 0..<m_len {
+        let val = samples[start + k] - mean
+        v[k] = val
+        sq[k + 1] = sq[k] + val * val
+      }
+    } else {
+      for k in 0..<m_len {
+        let idx = start + k
+        let val = if idx >= 0 && idx < nx { samples[idx] - mean } else { 0.0 }
+        v[k] = val
+        sq[k + 1] = sq[k] + val * val
+      }
     }
     for k in 0..<n_tpl {
       u[k] = v[k]
     }
-    @dsp.cross_correlation_fft(plan, u, n_tpl, v, m_len, cc, max_lag=max_r_lag)
+    @dsp.cross_correlation_fft_buf(
+      plan,
+      u,
+      n_tpl,
+      v,
+      m_len,
+      cc,
+      max_lag=max_r_lag,
+      fft_re,
+      fft_im,
+    )
     rx[0] = 1.0
     let e_u = sq[n_tpl]
     if e_u > 1.0e-300 {
+      let inv_sqrt_eu = 1.0 / e_u.sqrt()
       for tau in 1..<=max_r_lag {
         let e_v = sq[tau + n_tpl] - sq[tau]
         if e_v > 1.0e-300 {
-          let denom = (e_u * e_v).sqrt()
-          rx[tau] = if denom > 1.0e-300 { cc[tau] / denom } else { 0.0 }
+          let inv_denom = inv_sqrt_eu / e_v.sqrt()
+          rx[tau] = cc[tau] * inv_denom
         } else {
           rx[tau] = 0.0
         }
@@ -187,52 +211,20 @@ fn pitch_cc_core(
         rx[tau] = 0.0
       }
     }
-    // Collect voiced candidates from local maxima.
-    let voiced : Array[(Double, Double, Int32)] = []
-    let mut lg = minimum_lag
-    while lg < maximum_lag {
-      if rx[lg] > 0.5 * voicing_threshold &&
-        rx[lg] > rx[lg - 1] &&
-        rx[lg] >= rx[lg + 1] {
-        let dr = 0.5 * (rx[lg + 1] - rx[lg - 1])
-        let d2r = rx[lg] - rx[lg - 1] + (rx[lg] - rx[lg + 1])
-        if d2r > 0.0 {
-          let delta = dr / d2r
-          if delta > -1.0 && delta < 1.0 {
-            let (r_val, lag) = refine_peak(rx, lg, halfwin=max_r_lag)
-            if r_val > 0.0 && lag > 1.0 {
-              let mut strength = r_val
-              if strength > 1.0 {
-                strength = 1.0 / strength
-              }
-              voiced.push((strength, sample_rate / lag, lg))
-            }
-          }
-        }
-      }
-      lg += 1
-    }
-    voiced.sort_by(fn(p, q) {
-      let sp = p.0 - octave_cost * @math.log2(pitch_floor / p.1)
-      let sq_val = q.0 - octave_cost * @math.log2(pitch_floor / q.1)
-      if sp > sq_val {
-        -1
-      } else if sp < sq_val {
-        1
-      } else {
-        0
-      }
-    })
-    while voiced.length() > maxn - 1 {
-      ignore(voiced.pop())
-    }
-    let cands : Array[PitchCand] = [
-      { voiced: false, freq: 0.0, strength: 0.0, },
-    ]
-    for c in voiced {
-      cands.push({ voiced: true, freq: c.1, strength: c.0, })
-    }
-    all_cands.push(cands)
+    all_cands.push(
+      collect_voiced_candidates(
+        rx,
+        minimum_lag,
+        maximum_lag,
+        halfwin=max_r_lag,
+        max_depth=70,
+        sample_rate~,
+        voicing_threshold~,
+        pitch_floor~,
+        octave_cost~,
+        keep_limit~,
+      ),
+    )
   }
   solve_viterbi_pitch(
     all_cands,
@@ -251,7 +243,7 @@ fn pitch_cc_core(
 /// (forward cross-correlation, `FCC_NORMAL` method).
 ///
 /// Uses a shorter `1 / pitch_floor` template window (`time_step`
-/// defaults to `0.25 / pitch_floor`) than `pitch` (`To Pitch (ac)...`),
+/// defaults to `0.25 / pitch_floor`) than `pitch_ac` (`To Pitch (ac)...`),
 /// making it better suited to voice perturbation analysis (jitter /
 /// shimmer / point-process pulse extraction) and creaky or hoarse
 /// phonation.

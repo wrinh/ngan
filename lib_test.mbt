@@ -178,7 +178,7 @@ test "facade TextGrid parsing and segment acoustic summarization" {
 
   // Verify summarize_textgrid directly with precomputed tiers
   let it = @ngan.intensity(x, sample_rate=fs)
-  let pt = @ngan.pitch(x, sample_rate=fs)
+  let pt = @ngan.pitch_ac(x, sample_rate=fs)
   let ft = @ngan.formants(x, sample_rate=fs)
   let direct = @ngan.summarize_textgrid(tg, pitch=pt, formants=ft, intensity=it)
   assert_eq(direct, segs)

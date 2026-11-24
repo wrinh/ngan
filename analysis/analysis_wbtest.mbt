@@ -122,7 +122,7 @@ test "intensity of silence floors at -300 dB" {
 test "pitch tracks a 220 hz sine" {
   let fs = 16000.0
   let x = sine_fa(16000, fs, 220.0, 1.0, 0.0)
-  let tier = pitch(x, sample_rate=fs)
+  let tier = pitch_ac(x, sample_rate=fs)
   let total = tier.frames.length()
   assert_true(total > 50)
   // Interior frames must be voiced at 220 Hz +-0.1% with strength > 0.99.
@@ -140,7 +140,7 @@ test "pitch tracks a 220 hz sine" {
 test "pitch marks silence unvoiced" {
   let fs = 16000.0
   let x : FixedArray[Double] = FixedArray::make(16000, 0.0)
-  let tier = pitch(x, sample_rate=fs)
+  let tier = pitch_ac(x, sample_rate=fs)
   assert_true(tier.frames.length() > 50)
   for fr in tier.frames {
     assert_true(fr.frequency is None)
@@ -230,4 +230,166 @@ test "pitch_filtered_ac tracks 220 Hz sine and harmonic complex and rejects sile
   let silence : FixedArray[Double] = FixedArray::make(8000, 0.0)
   let pt_sil = pitch_filtered_ac(silence, sample_rate=fs)
   assert_true(pt_sil.mean() is None)
+}
+
+///|
+test "interp_lag Chebyshev recurrence matches direct Boersma eq 22 formula" {
+  let halfwin = 320
+  let r : FixedArray[Double] = FixedArray::make(halfwin + 2, 0.0)
+  for k in 0..<=(halfwin + 1) {
+    r[k] = @math.cos(2.0 * @math.PI * k.to_double() / 72.7272727) *
+      @math.exp(-k.to_double() / 500.0)
+  }
+  fn direct_interp(
+    r : FixedArray[Double],
+    x : Double,
+    halfwin : Int32,
+    max_depth : Int32,
+  ) -> Double {
+    let nl = @math.floor(x).to_int()
+    let l = x - nl.to_double()
+    let rr = 1.0 - l
+    let mut n_max = halfwin - 1 - nl
+    if n_max > max_depth {
+      n_max = max_depth
+    }
+    if n_max < 1 {
+      n_max = 1
+    }
+    let n_max_d = n_max.to_double()
+    let mut acc = 0.0
+    for n in 1..<=n_max {
+      let d = l + n.to_double() - 1.0
+      let pd = @math.PI * d
+      let s = if pd == 0.0 { 1.0 } else { @math.sin(pd) / pd }
+      let taper = 0.5 + 0.5 * @math.cos(@math.PI * d / (l + n_max_d))
+      let idx = nl + 1 - n
+      let aidx = if idx < 0 { -idx } else { idx }
+      if aidx < r.length() {
+        acc += r[aidx] * s * taper
+      }
+    }
+    for n in 1..<=n_max {
+      let d = rr + n.to_double() - 1.0
+      let pd = @math.PI * d
+      let s = if pd == 0.0 { 1.0 } else { @math.sin(pd) / pd }
+      let taper = 0.5 + 0.5 * @math.cos(@math.PI * d / (rr + n_max_d))
+      let idx = nl + n
+      if idx < r.length() {
+        acc += r[idx] * s * taper
+      }
+    }
+    acc
+  }
+  let xs : Array[Double] = [
+    2.37, 3.0, 72.0, 72.25, 72.72727, 72.9999999999995, 200.5, 317.4,
+  ]
+  for x in xs {
+    for md in [70, 500] {
+      let got = interp_lag(r, x, halfwin~, max_depth=md)
+      let want = direct_interp(r, x, halfwin, md)
+      assert_true(approx(got, want, 1.0e-10))
+    }
+  }
+  // High-frequency sine near Nyquist (lag ~ 3.2 < 8): harmonicity_ac must still
+  // find the true peak (> 20 dB HNR) without pruning short lags.
+  let fs = 16000.0
+  let hi_sine = sine_fa(16000, fs, 5000.0, 1.0, 0.0)
+  let hnr = harmonicity_ac(hi_sine, sample_rate=fs)
+  guard hnr.mean() is Some(mean_db) else {
+    fail("expected high-frequency sine to have defined HNR")
+  }
+  assert_true(mean_db > 20.0)
+}
+
+///|
+test "half-integer period broadband pulse train is not pruned in pitch or harmonicity" {
+  // Regression test: a bright pulse train at period T = 80.5 samples (198.76 Hz)
+  // has sinc(0.5) = 0.637 at integer lags 80 and 81 (parabolic estimate ~0.74),
+  // whereas lag 161.0 (2*T) lands on an exact integer. Curvature-aware pruning
+  // must still refine lag 80.5 and recover ~198.76 Hz and ~19 dB HNR.
+  let fs = 16000.0
+  let n = 16000
+  let f0 = fs / 80.5
+  let x : FixedArray[Double] = FixedArray::make(n, 0.0)
+  for i in 0..<n {
+    let t = i.to_double() / fs
+    let mut s = 0.0
+    for h in 1..<=38 {
+      s += @math.cos(2.0 * @math.PI * h.to_double() * f0 * t)
+    }
+    x[i] = s / 38.0 * (1.0 + 0.35 * @math.cos(2.0 * @math.PI * 15.0 * t))
+  }
+  let pt_k1 = pitch_ac(
+    x,
+    sample_rate=fs,
+    pitch_floor=75.0,
+    pitch_ceiling=600.0,
+    max_candidates=15,
+    octave_cost=0.0,
+    octave_jump_cost=0.0,
+    voiced_unvoiced_cost=0.0,
+  )
+  let mid_fr = pt_k1.frames[pt_k1.frames.length() / 2]
+  guard mid_fr.frequency is Some(f_k1) else {
+    fail("expected voiced frame on half-integer pulse train")
+  }
+  assert_true(approx(f_k1, f0, 0.1))
+  assert_true(mid_fr.strength > 0.98)
+
+  let hnr = harmonicity_ac(x, sample_rate=fs, min_pitch=75.0)
+  guard hnr.values[hnr.values.length() / 2] is Some(hnr_mid) else {
+    fail("expected defined HNR on half-integer pulse train")
+  }
+  assert_true(hnr_mid > 18.0)
+
+  // High octave_cost where upper_score > 1.5 must still keep short-lag and
+  // long-lag ordering sound without mis-pruning.
+  let s_hi : FixedArray[Double] = FixedArray::make(8000, 0.0)
+  for i in 0..<8000 {
+    let t = i.to_double() / fs
+    s_hi[i] = @math.sin(2.0 * @math.PI * 2500.0 * t) +
+      0.3 * @math.sin(2.0 * @math.PI * 150.0 * t)
+  }
+  let pt_hi = pitch_ac(
+    s_hi,
+    sample_rate=fs,
+    pitch_floor=50.0,
+    pitch_ceiling=4000.0,
+    octave_cost=0.35,
+  )
+  guard pt_hi.mean() is Some(m_hi) else {
+    fail("expected voiced frame with high octave_cost")
+  }
+  assert_true(approx(m_hi, 2500.0, 20.0))
+}
+
+///|
+test "refine_peak converges accurately on asymmetric autocorrelation peaks" {
+  // Asymmetric curve: sum of two shifted damped cosines peaking off-integer.
+  let halfwin = 200
+  let r : FixedArray[Double] = FixedArray::make(halfwin + 2, 0.0)
+  for k in 0..<=(halfwin + 1) {
+    let kd = k.to_double()
+    let d1 = (kd - 40.31) / 3.5
+    let d2 = (kd - 41.8) / 2.2
+    r[k] = 0.85 * @math.exp(-d1 * d1) + 0.35 * @math.exp(-d2 * d2)
+  }
+  let dr = 0.5 * (r[41] - r[39])
+  let d2r = r[40] - r[39] + (r[40] - r[41])
+  let delta = dr / d2r
+  let (val_brent, lag_brent) = refine_peak(r, 40, delta, halfwin~, max_depth=70)
+  // Dense grid reference over [39.0, 41.0] at step 1e-4.
+  let mut best_v = -1.0e9
+  let mut best_x = 40.0
+  for step in 0..<=20000 {
+    let x = 39.0 + step.to_double() * 1.0e-4
+    let v = interp_lag(r, x, halfwin~, max_depth=70)
+    if v > best_v {
+      best_v = v
+      best_x = x
+    }
+  }
+  assert_true(approx(lag_brent, best_x, 2.0e-4))
+  assert_true(approx(val_brent, best_v, 1.0e-8))
 }

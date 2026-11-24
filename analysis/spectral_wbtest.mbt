@@ -113,14 +113,14 @@ test "spectral_tilt measures H1-H2 and formant corrections" {
     out
   }
   let x_pos = two_harm(1.0, 0.5)
-  let pt_pos = pitch(x_pos, sample_rate=fs)
+  let pt_pos = pitch_ac(x_pos, sample_rate=fs)
   let st_pos = spectral_tilt(x_pos, sample_rate=fs, pitch=pt_pos)
   let mid = st_pos.frames[st_pos.frames.length() / 2]
   guard mid.h1_minus_h2 is Some(d_pos) else { fail("missing +6dB H1-H2") }
   assert_true(approx(d_pos, 6.020599913279624, 0.3))
 
   let x_neg = two_harm(0.5, 1.0)
-  let pt_neg = pitch(x_neg, sample_rate=fs)
+  let pt_neg = pitch_ac(x_neg, sample_rate=fs)
   let st_neg = spectral_tilt(x_neg, sample_rate=fs, pitch=pt_neg)
   let mid_neg = st_neg.frames[st_neg.frames.length() / 2]
   guard mid_neg.h1_minus_h2 is Some(d_neg) else { fail("missing -6dB H1-H2") }

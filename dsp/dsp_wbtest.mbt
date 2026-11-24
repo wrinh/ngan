@@ -47,6 +47,88 @@ test "fft matches direct dft and inverts" {
 }
 
 ///|
+test "real fft plan matches complex fft power, inverse, and autocorrelation" {
+  let n = 128
+  let x : FixedArray[Double] = FixedArray::make(64, 0.0)
+  for i in 0..<64 {
+    x[i] = prand(i)
+  }
+  let cplan = FftPlan::new(n)
+  let rplan = RealFftPlan::new(n)
+  // 1. forward_power vs complex FFT
+  let re : FixedArray[Double] = FixedArray::make(n, 0.0)
+  let im : FixedArray[Double] = FixedArray::make(n, 0.0)
+  for i in 0..<64 {
+    re[i] = x[i]
+  }
+  cplan.transform(re, im, inverse=false)
+  let rp : FixedArray[Double] = FixedArray::make(n / 2 + 1, 0.0)
+  rplan.forward_power(x, 64, rp)
+  for k in 0..<=(n / 2) {
+    let want = re[k] * re[k] + im[k] * im[k]
+    assert_true(approx(rp[k], want, 1.0e-9))
+  }
+  // 2. autocorrelation vs autocorrelation_fft
+  let ac_ref : FixedArray[Double] = FixedArray::make(64, 0.0)
+  let ac_fast : FixedArray[Double] = FixedArray::make(64, 0.0)
+  autocorrelation_fft(cplan, x, 64, ac_ref, max_lag=63)
+  rplan.autocorrelation(x, 64, ac_fast, max_lag=63, rp)
+  for tau in 0..<64 {
+    assert_true(approx(ac_fast[tau], ac_ref[tau], 1.0e-9))
+  }
+  // 3. inverse_real_even vs complex IFFT on log-power-like even spectrum
+  let spec : FixedArray[Double] = FixedArray::make(n / 2 + 1, 0.0)
+  let cre : FixedArray[Double] = FixedArray::make(n, 0.0)
+  let cim : FixedArray[Double] = FixedArray::make(n, 0.0)
+  for k in 0..<=(n / 2) {
+    let v = @math.ln(rp[k] + 1.0)
+    spec[k] = v
+    cre[k] = v
+    if k > 0 && k < n / 2 {
+      cre[n - k] = v
+    }
+  }
+  cplan.transform(cre, cim, inverse=true)
+  let out : FixedArray[Double] = FixedArray::make(n / 2 + 1, 0.0)
+  rplan.inverse_real_even(spec, out, n / 2 + 1)
+  for q in 0..<=(n / 2) {
+    assert_true(approx(out[q], cre[q], 1.0e-10))
+  }
+  // 4. filter_real vs complex FFT zero-phase filtering (including odd input length)
+  let odd_nx = 63
+  let x_odd : FixedArray[Double] = FixedArray::make(odd_nx, 0.0)
+  for i in 0..<odd_nx {
+    x_odd[i] = prand(i + 17)
+  }
+  let gains : FixedArray[Double] = FixedArray::make(n / 2 + 1, 0.0)
+  for k in 0..<=(n / 2) {
+    let r = k.to_double() / 12.0
+    gains[k] = @math.exp(-r * r)
+  }
+  let fre : FixedArray[Double] = FixedArray::make(n, 0.0)
+  let fim : FixedArray[Double] = FixedArray::make(n, 0.0)
+  for i in 0..<odd_nx {
+    fre[i] = x_odd[i]
+  }
+  cplan.transform(fre, fim, inverse=false)
+  for k in 0..<=(n / 2) {
+    let g = gains[k]
+    fre[k] *= g
+    fim[k] *= g
+    if k > 0 && k < n / 2 {
+      fre[n - k] *= g
+      fim[n - k] *= g
+    }
+  }
+  cplan.transform(fre, fim, inverse=true)
+  let filtered : FixedArray[Double] = FixedArray::make(odd_nx, 0.0)
+  rplan.filter_real(x_odd, odd_nx, gains, filtered)
+  for i in 0..<odd_nx {
+    assert_true(approx(filtered[i], fre[i], 1.0e-11))
+  }
+}
+
+///|
 test "fft autocorrelation matches direct computation" {
   let n = 64
   let x : FixedArray[Double] = FixedArray::make(n, 0.0)
@@ -173,6 +255,40 @@ test "sinc resample preserves passband and rejects alias band" {
     maxerr3 = @math.dmax(maxerr3, @math.abs(y3[j] - want))
   }
   assert_true(maxerr3 < 2.0e-3)
+  // Rational non-dyadic ratio (16 kHz -> 11 kHz, period 11) and irrational ratio (lookup table path).
+  let y_rat = sinc_resample(x, ratio=11000.0 / 16000.0)
+  assert_eq(y_rat.length(), 2750)
+  let mut maxerr_rat = 0.0
+  for j in 150..<2600 {
+    let want = @math.sin(2.0 * @math.PI * 500.0 * j.to_double() / 11000.0)
+    maxerr_rat = @math.dmax(maxerr_rat, @math.abs(y_rat[j] - want))
+  }
+  assert_true(maxerr_rat < 2.0e-3)
+  let irr = 0.73129137421
+  let y_irr = sinc_resample(x, ratio=irr)
+  let fs_irr = 16000.0 * irr
+  let mut maxerr_irr = 0.0
+  for j in 150..<(y_irr.length() - 150) {
+    let want = @math.sin(2.0 * @math.PI * 500.0 * j.to_double() / fs_irr)
+    maxerr_irr = @math.dmax(maxerr_irr, @math.abs(y_irr[j] - want))
+  }
+  assert_true(maxerr_irr < 2.0e-3)
+  // Edge cases: extreme ratios (0.01, 10.0), tiny inputs (nx = 1..5), zero_crossings = 1.
+  for nx in 1..<=5 {
+    let tiny : FixedArray[Double] = FixedArray::make(nx, 0.5)
+    let y_down = sinc_resample(tiny, ratio=0.01, zero_crossings=1)
+    assert_true(y_down.length() >= 1)
+    let y_up = sinc_resample(tiny, ratio=10.0, zero_crossings=1)
+    assert_eq(y_up.length(), nx * 10)
+  }
+  let x100 : FixedArray[Double] = FixedArray::make(100, 0.0)
+  for i in 0..<100 {
+    x100[i] = @math.sin(0.1 * i.to_double())
+  }
+  let y10x = sinc_resample(x100, ratio=10.0)
+  assert_eq(y10x.length(), 1000)
+  let y001x = sinc_resample(x, ratio=0.01)
+  assert_eq(y001x.length(), 40)
 }
 
 ///|

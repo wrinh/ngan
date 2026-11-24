@@ -158,46 +158,52 @@ fn filterbank_spectrogram(
       filter_weights.push(FixedArray::make(0, 0.0))
     }
   }
-  let plan = @dsp.FftPlan::new(nfft)
-  let re : FixedArray[Double] = FixedArray::make(nfft, 0.0)
-  let im : FixedArray[Double] = FixedArray::make(nfft, 0.0)
+  let rplan = @dsp.RealFftPlan::new(nfft)
+  let frame_buf : FixedArray[Double] = FixedArray::make(nwin, 0.0)
   let bin_power : FixedArray[Double] = FixedArray::make(half_nfft + 1, 0.0)
   let values : FixedArray[Double] = FixedArray::make(
     num_filters * nframes,
     -300.0,
   )
   let energy_scale = 1.0 / (windowssq * nfft.to_double())
+  let db_scale = 10.0 / @math.LN10
   for iframe in 0..<nframes {
     let t = t1 + iframe.to_double() * time_step
     let lo = low_index(t, sample_rate)
     let start = lo + 1 - halfnsamp
     let mut mean = 0.0
-    let mut count = 0
-    for k in 0..<nwin {
-      let idx = start + k
-      if idx >= 0 && idx < nx {
-        mean += samples[idx]
-        count += 1
+    if start >= 0 && start + nwin <= nx {
+      for k in 0..<nwin {
+        mean += samples[start + k]
+      }
+      mean /= nwin.to_double()
+      for k in 0..<nwin {
+        frame_buf[k] = (samples[start + k] - mean) * win[k]
+      }
+    } else {
+      let mut count = 0
+      for k in 0..<nwin {
+        let idx = start + k
+        if idx >= 0 && idx < nx {
+          mean += samples[idx]
+          count += 1
+        }
+      }
+      if count > 0 {
+        mean /= count.to_double()
+      }
+      for k in 0..<nwin {
+        let idx = start + k
+        let v = if idx >= 0 && idx < nx { samples[idx] - mean } else { 0.0 }
+        frame_buf[k] = v * win[k]
       }
     }
-    if count > 0 {
-      mean /= count.to_double()
-    }
-    for k in 0..<nwin {
-      let idx = start + k
-      let v = if idx >= 0 && idx < nx { samples[idx] - mean } else { 0.0 }
-      re[k] = v * win[k]
-      im[k] = 0.0
-    }
-    for k in nwin..<nfft {
-      re[k] = 0.0
-      im[k] = 0.0
-    }
-    plan.transform(re, im, inverse=false)
-    for k in 0..<=half_nfft {
-      let mag2 = re[k] * re[k] + im[k] * im[k]
-      let side = if k == 0 || k == half_nfft { 1.0 } else { 2.0 }
-      bin_power[k] = side * mag2 * energy_scale
+    rplan.forward_power(frame_buf, nwin, bin_power)
+    bin_power[0] *= energy_scale
+    bin_power[half_nfft] *= energy_scale
+    let two_scale = 2.0 * energy_scale
+    for k in 1..<half_nfft {
+      bin_power[k] *= two_scale
     }
     for m in 0..<num_filters {
       let k0 = filter_k0[m]
@@ -213,7 +219,7 @@ fn filterbank_spectrogram(
       values[m * nframes + iframe] = if rel <= 1.0e-30 {
         -300.0
       } else {
-        10.0 * @math.log10(rel)
+        db_scale * @math.ln(rel)
       }
     }
   }
@@ -298,22 +304,33 @@ pub fn mel_spectrogram_to_mfcc(
   let m_d = nf.to_double()
   let s0 = (1.0 / m_d).sqrt()
   let sk = (2.0 / m_d).sqrt()
+  // Precompute the (nc x nf) DCT-II basis matrix once instead of calling cos() per frame.
+  let dct : FixedArray[Double] = FixedArray::make(nc * nf, 0.0)
+  for k in 1..<=nc {
+    let kd = k.to_double()
+    let row = (k - 1) * nf
+    for j in 0..<nf {
+      dct[row + j] = sk * @math.cos(@math.PI * kd * (j.to_double() + 0.5) / m_d)
+    }
+  }
+  let col : FixedArray[Double] = FixedArray::make(nf, 0.0)
   let frames : Array[@types.MfccFrame] = []
   for t in 0..<nt {
     let mut sum0 = 0.0
     for j in 0..<nf {
-      sum0 += mel_spec.values[j * nt + t]
+      let v = mel_spec.values[j * nt + t]
+      col[j] = v
+      sum0 += v
     }
     let c0 = s0 * sum0
     let coeffs : FixedArray[Double] = FixedArray::make(nc, 0.0)
-    for k in 1..<=nc {
+    for k in 0..<nc {
+      let row = k * nf
       let mut acc = 0.0
-      let kd = k.to_double()
       for j in 0..<nf {
-        let angle = @math.PI * kd * (j.to_double() + 0.5) / m_d
-        acc += mel_spec.values[j * nt + t] * @math.cos(angle)
+        acc += col[j] * dct[row + j]
       }
-      coeffs[k - 1] = sk * acc
+      coeffs[k] = acc
     }
     frames.push({ time: mel_spec.t1 + t.to_double() * mel_spec.dt, c0, coeffs, })
   }

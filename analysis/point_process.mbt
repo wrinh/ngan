@@ -164,12 +164,21 @@ fn cc_step(
     let mut dot = 0.0
     let mut t_sum = 0.0
     let mut t_sum2 = 0.0
-    for k in 0..<win_len {
-      let idx = t_base + k
-      let val = if idx >= 0 && idx < nx { samples[idx] } else { 0.0 }
-      dot += ref_buf[k] * val
-      t_sum += val
-      t_sum2 += val * val
+    if t_base >= 0 && t_base + win_len <= nx {
+      for k in 0..<win_len {
+        let val = samples[t_base + k]
+        dot += ref_buf[k] * val
+        t_sum += val
+        t_sum2 += val * val
+      }
+    } else {
+      for k in 0..<win_len {
+        let idx = t_base + k
+        let val = if idx >= 0 && idx < nx { samples[idx] } else { 0.0 }
+        dot += ref_buf[k] * val
+        t_sum += val
+        t_sum2 += val * val
+      }
     }
     let e_t = t_sum2 - t_sum * t_sum / win_len_d
     if e_t > 1.0e-300 {

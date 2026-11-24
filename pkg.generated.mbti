@@ -74,7 +74,7 @@ pub fn mfcc(FixedArray[Double], sample_rate~ : Double, number_of_coefficients? :
 
 pub fn parse_textgrid(String) -> @types.TextGrid raise @types.TextGridError
 
-pub fn pitch(FixedArray[Double], sample_rate~ : Double, time_step? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_candidates? : Int32, voicing_threshold? : Double, silence_threshold? : Double, octave_cost? : Double, octave_jump_cost? : Double, voiced_unvoiced_cost? : Double) -> @types.PitchTier
+pub fn pitch_ac(FixedArray[Double], sample_rate~ : Double, time_step? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_candidates? : Int32, voicing_threshold? : Double, silence_threshold? : Double, octave_cost? : Double, octave_jump_cost? : Double, voiced_unvoiced_cost? : Double) -> @types.PitchTier
 
 pub fn pitch_cc(FixedArray[Double], sample_rate~ : Double, time_step? : Double, pitch_floor? : Double, pitch_ceiling? : Double, max_candidates? : Int32, voicing_threshold? : Double, silence_threshold? : Double, octave_cost? : Double, octave_jump_cost? : Double, voiced_unvoiced_cost? : Double) -> @types.PitchTier
 

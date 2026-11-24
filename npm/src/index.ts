@@ -218,18 +218,55 @@ export class NganEngine {
     return this.analyzeActiveHarmonicity(sampleRate, options);
   }
 
+  private hasMatrixReadout(): boolean {
+    return (
+      typeof this.exports.out_matrix_len === 'function' &&
+      typeof this.exports.get_out_matrix === 'function'
+    );
+  }
+
+  private readOutMatrix(): number[] {
+    const len = this.exports.out_matrix_len!();
+    const get = this.exports.get_out_matrix!;
+    const out = new Array<number>(len);
+    for (let i = 0; i < len; i++) {
+      out[i] = get(i);
+    }
+    return out;
+  }
+
   /** Praat `To Spectrogram...` on the active WASM sample buffer. */
   analyzeActiveSpectrogram(
     sampleRate: number,
     options: SpectrogramOptions = {},
   ): Spectrogram {
+    const windowLength = options.windowLength ?? 0.005;
+    const maximumFrequency = options.maximumFrequency ?? 5000.0;
+    const timeStep = options.timeStep ?? 0.002;
+    const frequencyStep = options.frequencyStep ?? 20.0;
+    const maxTimeColumns = options.maxTimeColumns ?? 0;
+    if (
+      typeof this.exports.analyze_spectrogram_meta_json === 'function' &&
+      this.hasMatrixReadout()
+    ) {
+      const metaJson = this.exports.analyze_spectrogram_meta_json(
+        sampleRate,
+        windowLength,
+        maximumFrequency,
+        timeStep,
+        frequencyStep,
+        maxTimeColumns,
+      );
+      const meta = JSON.parse(metaJson) as Omit<Spectrogram, 'power'>;
+      return { ...meta, power: this.readOutMatrix() };
+    }
     const json = this.exports.analyze_spectrogram_json(
       sampleRate,
-      options.windowLength ?? 0.005,
-      options.maximumFrequency ?? 5000.0,
-      options.timeStep ?? 0.002,
-      options.frequencyStep ?? 20.0,
-      options.maxTimeColumns ?? 0,
+      windowLength,
+      maximumFrequency,
+      timeStep,
+      frequencyStep,
+      maxTimeColumns,
     );
     return JSON.parse(json) as Spectrogram;
   }
@@ -268,19 +305,60 @@ export class NganEngine {
     options: CppsOptions = {},
   ): CppsAnalysis {
     this.writeSamples(samples);
+    const pitchFloor = options.pitchFloor ?? 60.0;
+    const timeStep = options.timeStep ?? 0.002;
+    const maximumFrequency = options.maximumFrequency ?? 5000.0;
+    const preEmphasisFrom = options.preEmphasisFrom ?? 50.0;
+    const subtractTiltBeforeSmoothing =
+      options.subtractTiltBeforeSmoothing === false ? 0 : 1;
+    const timeAveragingWindow = options.timeAveragingWindow ?? 0.01;
+    const quefrencyAveragingWindow = options.quefrencyAveragingWindow ?? 0.001;
+    const peakSearchPitchFloor = options.peakSearchPitchFloor ?? 60.0;
+    const peakSearchPitchCeiling = options.peakSearchPitchCeiling ?? 330.0;
+    const includeCepstrogram = options.includeCepstrogram ? 1 : 0;
+    const maxTimeColumns = options.maxTimeColumns ?? 0;
+    if (
+      typeof this.exports.analyze_cepstrogram_cpps_meta_json === 'function' &&
+      this.hasMatrixReadout()
+    ) {
+      const metaJson = this.exports.analyze_cepstrogram_cpps_meta_json(
+        sampleRate,
+        pitchFloor,
+        timeStep,
+        maximumFrequency,
+        preEmphasisFrom,
+        subtractTiltBeforeSmoothing,
+        timeAveragingWindow,
+        quefrencyAveragingWindow,
+        peakSearchPitchFloor,
+        peakSearchPitchCeiling,
+        includeCepstrogram,
+        maxTimeColumns,
+      );
+      const parsed = JSON.parse(metaJson) as {
+        cppsDb: number | null;
+        cepstrogram: Omit<NonNullable<CppsAnalysis['cepstrogram']>, 'power'> | null;
+      };
+      return {
+        cppsDb: parsed.cppsDb,
+        cepstrogram: parsed.cepstrogram
+          ? { ...parsed.cepstrogram, power: this.readOutMatrix() }
+          : null,
+      };
+    }
     const json = this.exports.analyze_cepstrogram_cpps_json(
       sampleRate,
-      options.pitchFloor ?? 60.0,
-      options.timeStep ?? 0.002,
-      options.maximumFrequency ?? 5000.0,
-      options.preEmphasisFrom ?? 50.0,
-      options.subtractTiltBeforeSmoothing === false ? 0 : 1,
-      options.timeAveragingWindow ?? 0.01,
-      options.quefrencyAveragingWindow ?? 0.001,
-      options.peakSearchPitchFloor ?? 60.0,
-      options.peakSearchPitchCeiling ?? 330.0,
-      options.includeCepstrogram ? 1 : 0,
-      options.maxTimeColumns ?? 0,
+      pitchFloor,
+      timeStep,
+      maximumFrequency,
+      preEmphasisFrom,
+      subtractTiltBeforeSmoothing,
+      timeAveragingWindow,
+      quefrencyAveragingWindow,
+      peakSearchPitchFloor,
+      peakSearchPitchCeiling,
+      includeCepstrogram,
+      maxTimeColumns,
     );
     return JSON.parse(json) as CppsAnalysis;
   }
@@ -317,15 +395,39 @@ export class NganEngine {
     sampleRate: number,
     options: FilterBankSpectrogramOptions = {},
   ): FilterBankMatrix {
+    const windowLength = options.windowLength ?? 0.015;
+    const timeStep = options.timeStep ?? 0.005;
+    const positionOfFirstFilter = options.positionOfFirstFilter ?? 100.0;
+    const distanceBetweenFilters = options.distanceBetweenFilters ?? 100.0;
+    const maximumFrequency = options.maximumFrequency ?? 0.0;
+    const maxTimeColumns = options.maxTimeColumns ?? 0;
+    if (
+      typeof this.exports.analyze_filterbank_spectrogram_meta_json ===
+        'function' &&
+      this.hasMatrixReadout()
+    ) {
+      const metaJson = this.exports.analyze_filterbank_spectrogram_meta_json(
+        sampleRate,
+        0,
+        windowLength,
+        timeStep,
+        positionOfFirstFilter,
+        distanceBetweenFilters,
+        maximumFrequency,
+        maxTimeColumns,
+      );
+      const meta = JSON.parse(metaJson) as Omit<FilterBankMatrix, 'values'>;
+      return { ...meta, values: this.readOutMatrix() };
+    }
     const json = this.exports.analyze_filterbank_spectrogram_json(
       sampleRate,
       0,
-      options.windowLength ?? 0.015,
-      options.timeStep ?? 0.005,
-      options.positionOfFirstFilter ?? 100.0,
-      options.distanceBetweenFilters ?? 100.0,
-      options.maximumFrequency ?? 0.0,
-      options.maxTimeColumns ?? 0,
+      windowLength,
+      timeStep,
+      positionOfFirstFilter,
+      distanceBetweenFilters,
+      maximumFrequency,
+      maxTimeColumns,
     );
     return JSON.parse(json) as FilterBankMatrix;
   }
@@ -345,15 +447,39 @@ export class NganEngine {
     sampleRate: number,
     options: FilterBankSpectrogramOptions = {},
   ): FilterBankMatrix {
+    const windowLength = options.windowLength ?? 0.015;
+    const timeStep = options.timeStep ?? 0.005;
+    const positionOfFirstFilter = options.positionOfFirstFilter ?? 1.0;
+    const distanceBetweenFilters = options.distanceBetweenFilters ?? 1.0;
+    const maximumFrequency = options.maximumFrequency ?? 0.0;
+    const maxTimeColumns = options.maxTimeColumns ?? 0;
+    if (
+      typeof this.exports.analyze_filterbank_spectrogram_meta_json ===
+        'function' &&
+      this.hasMatrixReadout()
+    ) {
+      const metaJson = this.exports.analyze_filterbank_spectrogram_meta_json(
+        sampleRate,
+        1,
+        windowLength,
+        timeStep,
+        positionOfFirstFilter,
+        distanceBetweenFilters,
+        maximumFrequency,
+        maxTimeColumns,
+      );
+      const meta = JSON.parse(metaJson) as Omit<FilterBankMatrix, 'values'>;
+      return { ...meta, values: this.readOutMatrix() };
+    }
     const json = this.exports.analyze_filterbank_spectrogram_json(
       sampleRate,
       1,
-      options.windowLength ?? 0.015,
-      options.timeStep ?? 0.005,
-      options.positionOfFirstFilter ?? 1.0,
-      options.distanceBetweenFilters ?? 1.0,
-      options.maximumFrequency ?? 0.0,
-      options.maxTimeColumns ?? 0,
+      windowLength,
+      timeStep,
+      positionOfFirstFilter,
+      distanceBetweenFilters,
+      maximumFrequency,
+      maxTimeColumns,
     );
     return JSON.parse(json) as FilterBankMatrix;
   }

@@ -1,0 +1,45 @@
+name: Publish npm package
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify tag matches npm/package.json version
+        run: |
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          PKG_VER="$(node -e "console.log(JSON.parse(require('fs').readFileSync('npm/package.json','utf8')).version)")"
+          if [ "$TAG_VER" != "$PKG_VER" ]; then
+            echo "Tag version ($TAG_VER) does not match npm/package.json version ($PKG_VER)"
+            exit 1
+          fi
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - name: Check (all targets)
+        run: moon check --target all
+      - name: Test MoonBit
+        run: moon test
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Build & test npm SDK
+        run: |
+          npm --prefix npm ci
+          npm --prefix npm run build
+          npm --prefix npm test
+      - name: Publish @wrinh/ngan to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm --prefix npm publish --access public --provenance

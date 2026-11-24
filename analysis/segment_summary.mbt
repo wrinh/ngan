@@ -279,7 +279,7 @@ pub fn analyze_segments(
   use_formant_tracking~ : Bool = false,
 ) -> Array[@types.SegmentSummary] {
   let it = intensity(samples, sample_rate~, min_pitch~)
-  let pt = pitch(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
+  let pt = pitch_ac(samples, sample_rate~, pitch_floor~, pitch_ceiling~)
   let raw_ft = formants(
     samples,
     sample_rate~,

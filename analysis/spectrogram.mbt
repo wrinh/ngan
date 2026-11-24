@@ -83,7 +83,7 @@ pub fn spectrogram(
   if number_of_freqs < 1 {
     return empty_spectrogram()
   }
-  let mut nfft = 1
+  let mut nfft = 4
   while nfft < nwin ||
         nfft.to_double() < 2.0 * number_of_freqs.to_double() * (nyquist / fmax) {
     nfft *= 2
@@ -116,42 +116,44 @@ pub fn spectrogram(
     return empty_spectrogram()
   }
   let one_by_bin_width = 1.0 / windowssq / bin_width_samples.to_double()
-  // Per-frame FFT and band averaging.
+  // Per-frame real-FFT and band averaging.
   let power : FixedArray[Double] = FixedArray::make(
     number_of_times * number_of_freqs,
     0.0,
   )
-  let plan = @dsp.FftPlan::new(nfft)
-  let data_re : FixedArray[Double] = FixedArray::make(nfft, 0.0)
-  let data_im : FixedArray[Double] = FixedArray::make(nfft, 0.0)
+  let rplan = @dsp.RealFftPlan::new(nfft)
+  let frame_buf : FixedArray[Double] = FixedArray::make(nwin, 0.0)
   let pw : FixedArray[Double] = FixedArray::make(half_nfft + 1, 0.0)
   for iframe in 0..<number_of_times {
     let t = t1 + iframe.to_double() * dt
     let lo = low_index(t, sample_rate)
     let start = lo + 1 - halfnsamp
-    for k in 0..<nwin {
-      let idx = start + k
-      // The frame is guaranteed to fit; clamp defensively anyway.
-      let v = if idx >= 0 && idx < nx { samples[idx] } else { 0.0 }
-      data_re[k] = v * window[k]
-      data_im[k] = 0.0
-    }
-    for k in nwin..<nfft {
-      data_re[k] = 0.0
-      data_im[k] = 0.0
-    }
-    plan.transform(data_re, data_im, inverse=false)
-    for k in 0..<=half_nfft {
-      pw[k] = data_re[k] * data_re[k] + data_im[k] * data_im[k]
-    }
-    // Binning: band b averages FFT bins [b * width, (b + 1) * width).
-    for band in 0..<number_of_freqs {
-      let base = band * bin_width_samples
-      let mut sum = 0.0
-      for j in 0..<bin_width_samples {
-        sum += pw[base + j]
+    if start >= 0 && start + nwin <= nx {
+      for k in 0..<nwin {
+        frame_buf[k] = samples[start + k] * window[k]
       }
-      power[band * number_of_times + iframe] = sum * one_by_bin_width
+    } else {
+      for k in 0..<nwin {
+        let idx = start + k
+        let v = if idx >= 0 && idx < nx { samples[idx] } else { 0.0 }
+        frame_buf[k] = v * window[k]
+      }
+    }
+    rplan.forward_power(frame_buf, nwin, pw)
+    // Binning: band b averages FFT bins [b * width, (b + 1) * width).
+    if bin_width_samples == 1 {
+      for band in 0..<number_of_freqs {
+        power[band * number_of_times + iframe] = pw[band] * one_by_bin_width
+      }
+    } else {
+      for band in 0..<number_of_freqs {
+        let base = band * bin_width_samples
+        let mut sum = 0.0
+        for j in 0..<bin_width_samples {
+          sum += pw[base + j]
+        }
+        power[band * number_of_times + iframe] = sum * one_by_bin_width
+      }
     }
   }
   {

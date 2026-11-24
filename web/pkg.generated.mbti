@@ -6,9 +6,13 @@ pub fn alloc_samples(Int32) -> Int32
 
 pub fn analyze_cepstrogram_cpps_json(Double, Double, Double, Double, Double, Int32, Double, Double, Double, Double, Int32, Int32) -> String
 
+pub fn analyze_cepstrogram_cpps_meta_json(Double, Double, Double, Double, Double, Int32, Double, Double, Double, Double, Int32, Int32) -> String
+
 pub fn analyze_csv(String, Double) -> String
 
 pub fn analyze_filterbank_spectrogram_json(Double, Int32, Double, Double, Double, Double, Double, Int32) -> String
+
+pub fn analyze_filterbank_spectrogram_meta_json(Double, Int32, Double, Double, Double, Double, Double, Int32) -> String
 
 pub fn analyze_formants_json(Double, Double, Int32, Double, Double, Double, Int32, Int32, Double, Double, Double, Double, Double) -> String
 
@@ -26,15 +30,21 @@ pub fn analyze_spectral_json(Double, Double, Double, Double, Double) -> String
 
 pub fn analyze_spectrogram_json(Double, Double, Double, Double, Double, Int32) -> String
 
+pub fn analyze_spectrogram_meta_json(Double, Double, Double, Double, Double, Int32) -> String
+
 pub fn analyze_textgrid_json(Double, String, String, Double, Double, Double, Int32, Double, Int32) -> String
 
 pub fn analyze_voice_report_json(Double, Double, Double, Double, Double) -> String
+
+pub fn get_out_matrix(Int32) -> Double
 
 pub fn get_out_sample(Int32) -> Double
 
 pub fn get_sample(Int32) -> Double
 
 pub fn manipulate_psola(Double, String, String, Double, Double, Double, Double, Double) -> Int32
+
+pub fn out_matrix_len() -> Int32
 
 pub fn out_samples_len() -> Int32
 

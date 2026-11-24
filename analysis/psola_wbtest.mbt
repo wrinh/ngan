@@ -31,7 +31,7 @@ test "resynthesize_psola shifts pitch and stretches duration accurately" {
   // 1) Time-stretch by 1.5x without changing pitch.
   let stretched = resynthesize_psola(x, sample_rate=fs, duration_factor=1.5)
   assert_true(@math.abs((stretched.length() - 24000).to_double()) <= 64.0)
-  let pt_str = pitch(stretched, sample_rate=fs)
+  let pt_str = pitch_ac(stretched, sample_rate=fs)
   guard pt_str.mean() is Some(f0_str) else { fail("stretched pitch missing") }
   assert_true(approx(f0_str, 180.0, 4.0))
 
@@ -41,7 +41,7 @@ test "resynthesize_psola shifts pitch and stretches duration accurately" {
     { time: 1.0, frequency: 234.0, },
   ])
   assert_true(@math.abs((shifted.length() - n).to_double()) <= 64.0)
-  let pt_sh = pitch(shifted, sample_rate=fs)
+  let pt_sh = pitch_ac(shifted, sample_rate=fs)
   guard pt_sh.mean() is Some(f0_sh) else { fail("shifted pitch missing") }
   assert_true(approx(f0_sh, 234.0, 6.0))
 
