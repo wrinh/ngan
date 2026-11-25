@@ -165,14 +165,20 @@ test('analyzeFormants recovers F1=500 Hz and F2=1500 Hz (raw & tracked)', async 
     numTracks: 2,
   });
   assert.equal(tracked.frames.length, raw.frames.length);
-  const midTracked = tracked.frames[Math.floor(tracked.frames.length / 2)];
+  const trackedInterior = tracked.frames.slice(40, tracked.frames.length - 40);
+  const trackedMeanF1 =
+    trackedInterior.reduce((a, fr) => a + fr.formants[0].frequency, 0) /
+    trackedInterior.length;
+  const trackedMeanF2 =
+    trackedInterior.reduce((a, fr) => a + fr.formants[1].frequency, 0) /
+    trackedInterior.length;
   assert.ok(
-    Math.abs(midTracked.formants[0].frequency - 500) < 70,
-    `trackedF1=${midTracked.formants[0].frequency}`,
+    Math.abs(trackedMeanF1 - 500) < 70,
+    `trackedMeanF1=${trackedMeanF1}`,
   );
   assert.ok(
-    Math.abs(midTracked.formants[1].frequency - 1500) < 100,
-    `trackedF2=${midTracked.formants[1].frequency}`,
+    Math.abs(trackedMeanF2 - 1500) < 100,
+    `trackedMeanF2=${trackedMeanF2}`,
   );
 });
 

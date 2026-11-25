@@ -102,7 +102,7 @@ test {
   inspect(
     f0,
     content=(
-      #|219.9996057850048
+      #|219.9996057833517
     ),
   )
 }
@@ -259,7 +259,7 @@ ngan
 ├── lib.mbt               # analyze_intensity / analyze_pitch / analyze_formants / analyze_all / ...
 ├── types/                # shared result types + Semitone/ERB/Mel/Bark conversions
 ├── math/                 # Complex, Bessel I0, Durand-Kerner polynomial roots, libm re-exports
-├── dsp/                  # radix-2 FFT, cross-correlation, Kaiser/Hann/Gaussian windows, sinc resampler, Burg LPC
+├── dsp/                  # radix-4/radix-2 FFT, half-length real FFT/IFFT, cross-correlation, Kaiser/Hann/Gaussian windows, transposed polyphase sinc resampler, Burg LPC
 ├── analysis/             # intensity, pitch (ac/cc/filtered ac), harmonicity, point_process, jitter/shimmer & voice breaks, formants & tracking, spectrogram, cepstrum/CPPS, Mel/Bark/MFCC, TD-PSOLA, ltas, spectral_features, segment_summary
 ├── textgrid/             # Praat .TextGrid parser & serializer (Long, Short, Chronological)
 ├── web/                  # WASM-GC FFI boundary (web.mbt) powering @wrinh/ngan
@@ -282,36 +282,36 @@ Where the original engine specification and the Praat sources disagree, ngan fol
 - **Spectrogram** (`To Spectrogram...`): Gaussian window spanning `2 * window_length` with Praat's exact `(exp(-48 p^2) - exp(-12)) / (1 - exp(-12))` shape, 8x oversampling limits, frequency steps snapped to whole FFT bins, band power `sum |X_k|^2 / sum w^2 / bin_width` in Pa²/Hz, and first band centred at `0.5 * (df - fft_bin_width)`.
 - **PowerCepstrogram & CPPS**: resamples to `2 * min(maximum_frequency, fs / 2)`, applies pre-emphasis, computes the squared real cepstrum of the log power spectrum via FFT/IFFT, optionally subtracts tilt before 2D boxcar smoothing, fits straight or exponential-decay baseline via OLS or Tukey biweight robust regression, and refines the cepstral peak parabolically.
 - **Mel / Bark Spectrograms & MFCC**: Mel triangular filterbank on `550 * ln(1 + f / 550)`, Bark Sekey & Hanson (1984) filterbank on `7 * ln(f/650 + sqrt(1 + (f/650)^2))`, and orthonormal DCT-II coefficients.
-- **Resampling**: Praat zeroes the spectrum above the target Nyquist and interpolates with a 50-tap sinc; ngan uses an equivalent Kaiser-12 band-limited sinc (32 zero crossings), never linear interpolation.
+- **Resampling**: Praat zeroes the spectrum above the target Nyquist and interpolates with a 50-tap sinc; ngan uses a transposed polyphase Kaiser-10 (`beta = 10.0`, `rolloff = 0.94`, `32` zero crossings; `beta = 12.0` / `rolloff = 1.0` optional) band-limited sinc resampler, never linear interpolation.
 - **Cross-correlation pitch, HNR & Voice Report**: `pitch_cc` uses `1 / pitch_floor` forward cross-correlation (`FCC_NORMAL`); `harmonicity_ac` uses Praat's 4.5-effective / 9.0-physical Gaussian window; `point_process_cc`, `jitter`, `shimmer`, and `voice_breaks` compute local/RAP/PPQ5/DDP jitter, local/dB/APQ3/APQ5/APQ11/DDA shimmer, locally unvoiced frame fraction, voice break count, and degree of voice breaks.
 - **TD-PSOLA Manipulation**: piecewise-linear `DurationTier` time-warp integration + pitch-synchronous 2-period Hanning overlap-add over voiced pulse runs and 5 ms COLA Hanning synthesis over unvoiced spans.
 
 ## Accuracy & Browser Benchmark
 
-The test suite (`moon test`, 57 tests; `npm --prefix npm test`, 10 tests) pins behavior against analytically known answers and end-to-end Worker/AudioWorklet pipelines.
+The test suite (`moon test`, 70 tests; `npm --prefix npm test`, 10 tests) pins behavior against analytically known answers and end-to-end Worker/AudioWorklet pipelines.
 
-Below are direct side-by-side measurements comparing post-optimization `@wrinh/ngan` (`182.5 KiB` / `186,860 B` `ngan.wasm`) in **Headless Microsoft Edge 158 (V8 WasmGC)** against **Praat 7.0** native C++ on identical 16 kHz mono WAV signals (`vowel_1_5s.wav` = 1.5 s gliding vowel; `speech_5s.wav` = 5.0 s multi-segment voiced audio with two 0.3 s unvoiced breaks; `long_30s.wav` = 30.0 s tiled signal):
+Below are direct side-by-side measurements comparing `@wrinh/ngan` (`187.55 KiB` / `192,055 B` `ngan.wasm`) in **Headless Microsoft Edge 158 (V8 WasmGC)** against **Praat 7.0** native C++ on identical 16 kHz mono WAV signals (`vowel_1_5s.wav` = 1.5 s gliding vowel; `speech_5s.wav` = 5.0 s multi-segment voiced audio with two 0.3 s unvoiced breaks; `long_30s.wav` = 30.0 s tiled signal):
 
-- **Cold load & compile (`ngan.wasm`)**: `createNgan()` default URL load `3.9 ms` (`compileOnlyMs: 2.0 ms`), total `fetch` + `init` `5.8–7.2 ms`; `createNganWorker()` spawn + init `17.9 ms`.
-- **30 s Worker chunked `analyzeLongAudio`** (`10 s` chunks, `0.5 s` overlap, Intensity + Pitch AC + Formants + `onProgress`): median `219.8 ms` (**RTF 0.00733**, **136.5× faster than real time**).
+- **Cold load & compile (`ngan.wasm`)**: `createNgan()` default URL load `4.90 ms` (`compileOnlyMs: 2.00 ms`), total `fetch` + `init` `6.00–6.80 ms`; `createNganWorker()` spawn + init `17.80–19.70 ms`.
+- **30 s Worker chunked `analyzeLongAudio`** (`10 s` chunks, `0.5 s` overlap, Intensity + Pitch AC + Formants + `onProgress`): median `194.70 ms` (**RTF 0.00649**, **154.08× faster than real time**).
 
 ### `speech_5s.wav` (5.0 s, 16 kHz, 80,000 samples) — Timing & Numerical Parity
 
 | Command / Method | `ngan` Median (ms) | Praat 7.0 Mean (ms) | `ngan` Result | Praat 7.0 Result | Difference |
 | --- | ---: | ---: | --- | --- | --- |
-| `To Intensity...` | `1.90` | `1.44` | 618 frames, `77.9963 dB` | 618 frames, `77.9963 dB` | `-0.00003 dB` |
-| `To Pitch (ac)...` | `12.15` | `2.25` | 439/497 voiced, `196.0066 Hz` | 439/497 voiced, `196.0066 Hz` | `-0.000001 Hz` |
-| `To Pitch (cc)...` | `37.15` | `9.81` | 1312/1493 voiced, `195.9314 Hz` | 1312/1493 voiced, `195.9294 Hz` | `+0.0020 Hz` |
-| `To Pitch (filtered ac)...` | `22.10` | `7.08` | 291/330 voiced, `196.0429 Hz` | 291/330 voiced, `196.0429 Hz` | `+0.000001 Hz` |
-| `To Formant (burg)...` | `15.80` | `20.25` | 793 frames, F1 `625.75` / F2 `1581.65 Hz` | 793 frames, F1 `628.27` / F2 `1591.01 Hz` | `-2.52` / `-9.36 Hz` |
-| `To Spectrogram...` | `9.75` | `1.81` | `2496 × 160` (zero-JSON FFI) | — | — |
-| `To Harmonicity (ac)...` | `77.90` | `24.06` | 431/489 defined, `20.6725 dB` | 431/489 defined, `20.6725 dB` | `+0.0000002 dB` |
-| `Voice report...` | `89.30` | `18.08` | 2 breaks (`12.168%`), jitter `0.591%`, shimmer `1.326%` | 2 breaks (`12.168%`), jitter `0.589%`, shimmer `1.797%` | breaks exact, jitter `+0.001%`, shimmer `-0.47%` |
-| `To PowerCepstrogram` + `Get CPPS` | `281.10` | `529.64` | `19.996 dB` | `19.256 dB` | `+0.740 dB` |
-| `To MelSpectrogram...` | `4.25` | `9.07` | `994 × 15` (zero-JSON FFI) | — | — |
-| `To BarkSpectrogram...` | `5.15` | `92.54` | `994 × 22` (**18.0× faster than Praat**) | — | — |
-| `To MFCC...` | `7.85` | `9.69` | 994 frames (orthonormal DCT-II) | 994 frames (Praat DCT scaling) | exact frame grid |
-| `To Manipulation` + OLA (`+4 st`) | `17.00` | `9.52` | `5.000 s`, F0 `246.923 Hz` | `5.000 s`, F0 `246.950 Hz` | `-0.027 Hz` (`0.01%`) |
+| `To Intensity...` | `1.80` | `1.44` | 618 frames, `77.9963 dB` | 618 frames, `77.9963 dB` | `-0.00003 dB` |
+| `To Pitch (ac)...` | `9.95` | `2.25` | 439/497 voiced, `196.0066 Hz` | 439/497 voiced, `196.0066 Hz` | `-0.000001 Hz` |
+| `To Pitch (cc)...` | `28.90` | `9.81` | 1312/1493 voiced, `195.9314 Hz` | 1312/1493 voiced, `195.9294 Hz` | `+0.0020 Hz` |
+| `To Pitch (filtered ac)...` | `15.00` | `7.08` | 291/330 voiced, `196.0429 Hz` | 291/330 voiced, `196.0429 Hz` | `+0.000001 Hz` |
+| `To Formant (burg)...` | `16.85` | `20.25` | 793 frames, F1 `617.75` / F2 `1547.97 Hz` | 793 frames, F1 `628.27` / F2 `1591.01 Hz` | `-10.52` / `-43.04 Hz` |
+| `To Spectrogram...` | `6.90` | `1.81` | `2496 × 160` (zero-JSON FFI) | — | — |
+| `To Harmonicity (ac)...` | `59.85` | `24.06` | 431/489 defined, `20.6725 dB` | 431/489 defined, `20.6725 dB` | `+0.0000002 dB` |
+| `Voice report...` | `73.60` | `18.08` | 2 breaks (`12.168%`), jitter `0.591%`, shimmer `1.326%` | 2 breaks (`12.168%`), jitter `0.589%`, shimmer `1.797%` | breaks exact, jitter `+0.001%`, shimmer `-0.47%` |
+| `To PowerCepstrogram` + `Get CPPS` | `257.80` | `529.64` | `19.464 dB` (**2.05× faster than Praat**) | `19.256 dB` | `+0.208 dB` |
+| `To MelSpectrogram...` | `3.20` | `9.07` | `994 × 15` (**2.84× faster than Praat**) | — | — |
+| `To BarkSpectrogram...` | `4.15` | `92.54` | `994 × 22` (**22.30× faster than Praat**) | — | — |
+| `To MFCC...` | `6.75` | `9.69` | 994 frames (**1.44× faster than Praat**) | 994 frames (Praat DCT scaling) | exact frame grid |
+| `To Manipulation` + OLA (`+4 st`) | `13.50` | `9.52` | `5.000 s`, F0 `246.923 Hz` | `5.000 s`, F0 `246.950 Hz` | `-0.027 Hz` (`0.01%`) |
 
 *(Note: `ngan` beats native C++ Praat 7.0 on Formants, CPPS, MFCC, MelSpectrogram, and BarkSpectrogram in single-threaded Edge WasmGC; `VoiceReport` runs `Pitch` + `PointProcess` + `Harmonicity` together; `MFCC` uses orthonormal `sqrt(1/N)` / `sqrt(2/N)` DCT-II scaling.)*
 
@@ -320,24 +320,24 @@ Below are direct side-by-side measurements comparing post-optimization `@wrinh/n
 Direct head-to-head browser comparison against `praat-wasm` (Emscripten C++ build of Praat) on the same Edge 158 engine:
 
 - **Artifact & Cold Startup**:
-  - **WASM size**: `ngan.wasm` `186,860 B` (`182.5 KiB`) vs `praat.wasm` `24,665,614 B` (`23.52 MiB`) (**132.0× smaller**).
-  - **Local cold load + init**: `ngan` `5.80 ms` vs `praat-wasm` `226.00 ms` (**39.0× faster startup**); `createNganWorker()` initializes in `17.9–35.3 ms` (`praat-wasm` worker failed with `Error: Worker error`).
+  - **WASM size**: `ngan.wasm` `192,055 B` (`187.55 KiB`) vs `praat.wasm` `24,665,614 B` (`23.52 MiB`) (**128.4× smaller**).
+  - **Local cold load + init**: `ngan` `6.00 ms` vs `praat-wasm` `211.60 ms` (**35.3× faster startup**); `createNganWorker()` initializes in `17.80–19.70 ms` (`praat-wasm` worker failed with `Error: Worker error`).
 
 | Operation (`speech_5s.wav`, 5.0 s / 16 kHz) | `ngan` Median (ms) | `praat-wasm` Median (ms) | Speedup (`praat-wasm / ngan`) |
 | --- | ---: | ---: | ---: |
-| `To Intensity...` | `1.70` | `26.00` | **15.29× faster** |
-| `To Pitch (ac)...` | `12.25` | `18.25` | **1.49× faster** |
-| `To Pitch (cc)...` | `36.00` | `1048.50` | **29.13× faster** |
-| `To Pitch (filtered ac)...` | `20.10` | `31.50` | **1.57× faster** |
-| `To Formant (burg)...` | `15.55` | `241.25` | **15.51× faster** |
-| `To Spectrogram...` | `9.05` | `35.85` | **3.96× faster** |
-| `To Harmonicity (ac)...` | `68.00` | `147.30` | **2.17× faster** |
-| `Voice report...` | `85.60` | `1343.70` | **15.70× faster** |
-| `To PowerCepstrogram` + `Get CPPS` | `277.50` | `12,648.50` | **45.58× faster** |
-| `To MelSpectrogram...` | `4.15` | `69.35` | **16.71× faster** |
-| `To BarkSpectrogram...` | `4.90` | `277.10` | **56.55× faster** |
-| `To MFCC...` | `7.80` | `98.45` | **12.62× faster** |
-| `To Manipulation` + OLA (`+4 st`) | `15.60` | `144.45` | **9.26× faster** |
+| `To Intensity...` | `1.70` | `24.45` | **14.38× faster** |
+| `To Pitch (ac)...` | `9.70` | `17.55` | **1.81× faster** |
+| `To Pitch (cc)...` | `28.25` | `993.10` | **35.15× faster** |
+| `To Pitch (filtered ac)...` | `14.20` | `30.20` | **2.13× faster** |
+| `To Formant (burg)...` | `15.60` | `224.35` | **14.38× faster** |
+| `To Spectrogram...` | `7.05` | `38.30` | **5.43× faster** |
+| `To Harmonicity (ac)...` | `58.50` | `140.00` | **2.39× faster** |
+| `Voice report...` | `70.50` | `1266.50` | **17.96× faster** |
+| `To PowerCepstrogram` + `Get CPPS` | `245.40` | `12,222.80` | **49.81× faster** |
+| `To MelSpectrogram...` | `3.35` | `69.35` | **20.70× faster** |
+| `To BarkSpectrogram...` | `3.90` | `270.45` | **69.35× faster** |
+| `To MFCC...` | `7.20` | `95.05` | **13.20× faster** |
+| `To Manipulation` + OLA (`+4 st`) | `13.80` | `137.25` | **9.95× faster** |
 
 ## License
 

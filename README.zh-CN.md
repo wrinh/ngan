@@ -217,28 +217,28 @@ ngan
 
 ## 真实浏览器性能与 Praat 对比
 
-以下为在 **Headless Microsoft Edge 158（V8 WasmGC）** 中实测性能优化后的 `@wrinh/ngan`（`ngan.wasm` 体积 `182.5 KiB` / `186,860 B`）并与同机原生 **Praat 7.0**（C++）在完全相同的 16 kHz 单声道 WAV 测试集上的对比结果（`speech_5s.wav` 为 5.0 秒含两段 0.3 秒清音/静音断音的多段元音；`long_30s.wav` 为 30.0 秒音频）：
+以下为在 **Headless Microsoft Edge 158（V8 WasmGC）** 中实测 DSP 优化后的 `@wrinh/ngan`（`ngan.wasm` 体积 `187.55 KiB` / `192,055 B`）并与同机原生 **Praat 7.0**（C++）在完全相同的 16 kHz 单声道 WAV 测试集上的对比结果（`speech_5s.wav` 为 5.0 秒含两段 0.3 秒清音/静音断音的多段元音；`long_30s.wav` 为 30.0 秒音频）：
 
-- **冷启动加载耗时（`ngan.wasm`）**：`createNgan()` 默认加载 `3.9 ms`（仅编译 `2.0 ms`），`fetch` + 初始化总计 `5.8–7.2 ms`；`createNganWorker()` 创建并初始化 Worker `17.9 ms`。
-- **30 秒长音频 Web Worker 分块分析（`analyzeLongAudio`）**：`10 s` 分块、`0.5 s` 重叠（同时计算 Intensity + Pitch AC + Formants + `onProgress` 回调），中位耗时 `219.8 ms`（**RTF 0.00733**，约 **136.5 倍实时速度**）。
+- **冷启动加载耗时（`ngan.wasm`）**：`createNgan()` 默认加载 `4.90 ms`（仅编译 `2.00 ms`），`fetch` + 初始化总计 `6.00–6.80 ms`；`createNganWorker()` 创建并初始化 Worker `17.80–19.70 ms`。
+- **30 秒长音频 Web Worker 分块分析（`analyzeLongAudio`）**：`10 s` 分块、`0.5 s` 重叠（同时计算 Intensity + Pitch AC + Formants + `onProgress` 回调），中位耗时 `194.70 ms`（**RTF 0.00649**，约 **154.08 倍实时速度**）。
 
 ### `speech_5s.wav`（5.0 s / 16 kHz / 80,000 采样点）耗时与计算精度对比
 
 | 命令 / 接口 | `ngan` 中位耗时 (ms) | Praat 7.0 平均耗时 (ms) | `ngan` 计算结果 | Praat 7.0 计算结果 | 数值差异 |
 | --- | ---: | ---: | --- | --- | --- |
-| `To Intensity...` | `1.90` | `1.44` | 618 帧，`77.9963 dB` | 618 帧，`77.9963 dB` | `-0.00003 dB` |
-| `To Pitch (ac)...` | `12.15` | `2.25` | 439/497 浊音帧，`196.0066 Hz` | 439/497 浊音帧，`196.0066 Hz` | `-0.000001 Hz` |
-| `To Pitch (cc)...` | `37.15` | `9.81` | 1312/1493 浊音帧，`195.9314 Hz` | 1312/1493 浊音帧，`195.9294 Hz` | `+0.0020 Hz` |
-| `To Pitch (filtered ac)...` | `22.10` | `7.08` | 291/330 浊音帧，`196.0429 Hz` | 291/330 浊音帧，`196.0429 Hz` | `+0.000001 Hz` |
-| `To Formant (burg)...` | `15.80` | `20.25` | 793 帧，F1 `625.75` / F2 `1581.65 Hz` | 793 帧，F1 `628.27` / F2 `1591.01 Hz` | `-2.52` / `-9.36 Hz` |
-| `To Spectrogram...` | `9.75` | `1.81` | `2496 × 160`（零 JSON FFI） | — | — |
-| `To Harmonicity (ac)...` | `77.90` | `24.06` | 431/489 有效帧，`20.6725 dB` | 431/489 有效帧，`20.6725 dB` | `+0.0000002 dB` |
-| `Voice report...` | `89.30` | `18.08` | 2 次断音（`12.168%`），jitter `0.591%`，shimmer `1.326%` | 2 次断音（`12.168%`），jitter `0.589%`，shimmer `1.797%` | 断音完全一致，jitter `+0.001%`，shimmer `-0.47%` |
-| `To PowerCepstrogram` + `Get CPPS` | `281.10` | `529.64` | `19.996 dB` | `19.256 dB` | `+0.740 dB` |
-| `To MelSpectrogram...` | `4.25` | `9.07` | `994 × 15`（零 JSON FFI） | — | — |
-| `To BarkSpectrogram...` | `5.15` | `92.54` | `994 × 22`（**比 Praat 快 18.0 倍**） | — | — |
-| `To MFCC...` | `7.85` | `9.69` | 994 帧（正交 DCT-II） | 994 帧（Praat 非正交缩放） | 帧网格完全一致 |
-| `To Manipulation` + OLA（`+4 st`） | `17.00` | `9.52` | `5.000 s`，F0 `246.923 Hz` | `5.000 s`，F0 `246.950 Hz` | `-0.027 Hz`（`0.01%`） |
+| `To Intensity...` | `1.80` | `1.44` | 618 帧，`77.9963 dB` | 618 帧，`77.9963 dB` | `-0.00003 dB` |
+| `To Pitch (ac)...` | `9.95` | `2.25` | 439/497 浊音帧，`196.0066 Hz` | 439/497 浊音帧，`196.0066 Hz` | `-0.000001 Hz` |
+| `To Pitch (cc)...` | `28.90` | `9.81` | 1312/1493 浊音帧，`195.9314 Hz` | 1312/1493 浊音帧，`195.9294 Hz` | `+0.0020 Hz` |
+| `To Pitch (filtered ac)...` | `15.00` | `7.08` | 291/330 浊音帧，`196.0429 Hz` | 291/330 浊音帧，`196.0429 Hz` | `+0.000001 Hz` |
+| `To Formant (burg)...` | `16.85` | `20.25` | 793 帧，F1 `617.75` / F2 `1547.97 Hz` | 793 帧，F1 `628.27` / F2 `1591.01 Hz` | `-10.52` / `-43.04 Hz` |
+| `To Spectrogram...` | `6.90` | `1.81` | `2496 × 160`（零 JSON FFI） | — | — |
+| `To Harmonicity (ac)...` | `59.85` | `24.06` | 431/489 有效帧，`20.6725 dB` | 431/489 有效帧，`20.6725 dB` | `+0.0000002 dB` |
+| `Voice report...` | `73.60` | `18.08` | 2 次断音（`12.168%`），jitter `0.591%`，shimmer `1.326%` | 2 次断音（`12.168%`），jitter `0.589%`，shimmer `1.797%` | 断音完全一致，jitter `+0.001%`，shimmer `-0.47%` |
+| `To PowerCepstrogram` + `Get CPPS` | `257.80` | `529.64` | `19.464 dB`（**比 Praat 快 2.05 倍**） | `19.256 dB` | `+0.208 dB` |
+| `To MelSpectrogram...` | `3.20` | `9.07` | `994 × 15`（**比 Praat 快 2.84 倍**） | — | — |
+| `To BarkSpectrogram...` | `4.15` | `92.54` | `994 × 22`（**比 Praat 快 22.30 倍**） | — | — |
+| `To MFCC...` | `6.75` | `9.69` | 994 帧（**比 Praat 快 1.44 倍**） | 994 帧（Praat 非正交缩放） | 帧网格完全一致 |
+| `To Manipulation` + OLA（`+4 st`） | `13.50` | `9.52` | `5.000 s`，F0 `246.923 Hz` | `5.000 s`，F0 `246.950 Hz` | `-0.027 Hz`（`0.01%`） |
 
 > 说明：在单线程 Edge WasmGC 下，`ngan` 的 `Formants`、`CPPS`、`MFCC`、`MelSpectrogram` 与 `BarkSpectrogram` 耗时已全面优于原生 C++ 版 `Praat 7.0`；`VoiceReport` 顺序执行 `Pitch` + `PointProcess` + `Harmonicity`；`MFCC` 采用标准正交 `sqrt(1/N)` / `sqrt(2/N)` DCT-II 系数缩放。
 
@@ -247,24 +247,24 @@ ngan
 在相同 Edge 158 环境下与 Emscripten C++ 编译的 `praat-wasm`（v6.4.6200）进行同条件对比：
 
 - **包体积与冷启动**：
-  - **WASM 体积**：`ngan.wasm` `186,860 B`（`182.5 KiB`）vs `praat.wasm` `24,665,614 B`（`23.52 MiB`），体积缩小 **132.0 倍**。
-  - **本地冷加载 + 初始化**：`ngan` `5.80 ms` vs `praat-wasm` `226.00 ms`，冷启动快 **39.0 倍**；`createNganWorker()` 初始化 `17.9–35.3 ms`（`praat-wasm` Worker 启动报错 `Error: Worker error`）。
+  - **WASM 体积**：`ngan.wasm` `192,055 B`（`187.55 KiB`）vs `praat.wasm` `24,665,614 B`（`23.52 MiB`），体积缩小 **128.4 倍**。
+  - **本地冷加载 + 初始化**：`ngan` `6.00 ms` vs `praat-wasm` `211.60 ms`，冷启动快 **35.3 倍**；`createNganWorker()` 初始化 `17.80–19.70 ms`（`praat-wasm` Worker 启动报错 `Error: Worker error`）。
 
 | 操作（`speech_5s.wav`，5.0 s / 16 kHz） | `ngan` 中位耗时 (ms) | `praat-wasm` 中位耗时 (ms) | 速度比（`praat-wasm / ngan`） |
 | --- | ---: | ---: | ---: |
-| `To Intensity...` | `1.70` | `26.00` | **快 15.29 倍** |
-| `To Pitch (ac)...` | `12.25` | `18.25` | **快 1.49 倍** |
-| `To Pitch (cc)...` | `36.00` | `1048.50` | **快 29.13 倍** |
-| `To Pitch (filtered ac)...` | `20.10` | `31.50` | **快 1.57 倍** |
-| `To Formant (burg)...` | `15.55` | `241.25` | **快 15.51 倍** |
-| `To Spectrogram...` | `9.05` | `35.85` | **快 3.96 倍** |
-| `To Harmonicity (ac)...` | `68.00` | `147.30` | **快 2.17 倍** |
-| `Voice report...` | `85.60` | `1343.70` | **快 15.70 倍** |
-| `To PowerCepstrogram` + `Get CPPS` | `277.50` | `12,648.50` | **快 45.58 倍** |
-| `To MelSpectrogram...` | `4.15` | `69.35` | **快 16.71 倍** |
-| `To BarkSpectrogram...` | `4.90` | `277.10` | **快 56.55 倍** |
-| `To MFCC...` | `7.80` | `98.45` | **快 12.62 倍** |
-| `To Manipulation` + OLA（`+4 st`） | `15.60` | `144.45` | **快 9.26 倍** |
+| `To Intensity...` | `1.70` | `24.45` | **快 14.38 倍** |
+| `To Pitch (ac)...` | `9.70` | `17.55` | **快 1.81 倍** |
+| `To Pitch (cc)...` | `28.25` | `993.10` | **快 35.15 倍** |
+| `To Pitch (filtered ac)...` | `14.20` | `30.20` | **快 2.13 倍** |
+| `To Formant (burg)...` | `15.60` | `224.35` | **快 14.38 倍** |
+| `To Spectrogram...` | `7.05` | `38.30` | **快 5.43 倍** |
+| `To Harmonicity (ac)...` | `58.50` | `140.00` | **快 2.39 倍** |
+| `Voice report...` | `70.50` | `1266.50` | **快 17.96 倍** |
+| `To PowerCepstrogram` + `Get CPPS` | `245.40` | `12,222.80` | **快 49.81 倍** |
+| `To MelSpectrogram...` | `3.35` | `69.35` | **快 20.70 倍** |
+| `To BarkSpectrogram...` | `3.90` | `270.45` | **快 69.35 倍** |
+| `To MFCC...` | `7.20` | `95.05` | **快 13.20 倍** |
+| `To Manipulation` + OLA（`+4 st`） | `13.80` | `137.25` | **快 9.95 倍** |
 
 ## 开源协议
 

@@ -13,7 +13,7 @@ Derived from Praat's GPL-3+ C++ sources → **the whole repo is GPL-3.0-or-later
 - `lib.mbt` + `lib_test.mbt` — root facade: `analyze_intensity`, `analyze_pitch`, `analyze_formants`, `analyze_spectrogram`, `analyze_all`; re-exports via `pub using`.
 - `types/` — shared result structs (`IntensityTier`, `PitchTier`, `FormantTier`, `Spectrogram`, ...). Public types live here, not in internal packages.
 - `math/` — Complex, Bessel I0, Durand-Kerner roots, libm re-exports (`wrinh/ngan/math`, alias `@math`).
-- `dsp/` — radix-2 FFT (`FftPlan`, `RealFftPlan`), Kaiser/Hann/Gaussian windows, sinc resampler (polyphase fast paths), Burg LPC.
+- `dsp/` — radix-4/radix-2 FFT (`FftPlan`, `RealFftPlan`), half-length real IFFT for cross-correlation, Kaiser/Hann/Gaussian windows, transposed polyphase sinc resampler, Burg LPC.
 - `analysis/` — the four Praat ports (`intensity.mbt`, `pitch.mbt`, `formant.mbt`, `spectrogram.mbt`).
 - `web/` — WasmGC FFI boundary package (`web.mbt` with `link wasm-gc exports`) producing `web.wasm` for `@wrinh/ngan` (`npm/`).
 - `npm/` — TypeScript SDK (`@wrinh/ngan`), Web Worker wrapper, chunked long-audio analysis, and AudioWorklet streaming.
@@ -24,7 +24,7 @@ Derived from Praat's GPL-3+ C++ sources → **the whole repo is GPL-3.0-or-later
 
 ```bash
 moon check --target all   # typecheck (also catches wasm-gc-only issues)
-moon test                 # 64 tests; README.mbt.md doc blocks are tests
+moon test                 # 70 tests; README.mbt.md doc blocks are tests
 moon test -u              # update inspect snapshots after intended changes
 moon fmt && moon info     # format; regenerate *.mbti (commit mbti diffs)
 moon run cmd/main         # CLI demo
@@ -53,4 +53,4 @@ moon build --target wasm-gc --release   # artifact in _build/.../web/web.wasm
   - `PitchCand` precomputes `log2_freq`; `solve_viterbi_pitch` takes an $O(N \cdot C)$ direct scan when transition costs are zero (`harmonicity_ac`/`cc`).
 - **Cepstral smoothing (`analysis/cepstrum.mbt`)**: `smooth_cepstral_grid` must stay subtraction-free (direct loop for small windows, van Herk / Gil-Werman block prefix+suffix sums for large windows); cumulative prefix-sum subtraction suffers catastrophic cancellation near large `q = 0` DC spikes.
 - **Resampling & PSOLA (`dsp/resample.mbt`, `analysis/psola.mbt`)**: `sinc_resample` uses polyphase lookup tables for integer and rational (`l_int <= 256`) ratios; `ola_hanning_grain` uses trig rotation recurrence and an interior bounds-free loop.
-- **Benchmarking**: Post-optimization Headless Microsoft Edge 158 (V8 WasmGC) benchmarks on `speech_5s.wav` / `vowel_1_5s.wav` / `long_30s.wav` are recorded in `README.mbt.md` and `README.zh-CN.md` (`~10×–138×` faster than pre-optimization, `1.49×–56.55×` faster than `praat-wasm` v6.4.6200 across all 13 analyzers, `136.5×` real-time on 30 s Worker `analyzeLongAudio`).
+- **Benchmarking**: Post-optimization Headless Microsoft Edge 158 (V8 WasmGC) benchmarks on `speech_5s.wav` / `vowel_1_5s.wav` / `long_30s.wav` are recorded in `README.mbt.md` and `README.zh-CN.md` (`1.81×–69.35×` faster than `praat-wasm` v6.4.6200 across all 13 analyzers, `154.08×` real-time on 30 s Worker `analyzeLongAudio`).

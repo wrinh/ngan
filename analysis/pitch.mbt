@@ -715,9 +715,8 @@ fn pitch_ac_core(
   }
   let nfft = if nfft_raw < 4 { 4 } else { nfft_raw }
   let rplan = @dsp.RealFftPlan::new(nfft)
-  let fft_power : FixedArray[Double] = FixedArray::make(nfft / 2 + 1, 0.0)
   let wac : FixedArray[Double] = FixedArray::make(brent_ixmax + 2, 0.0)
-  rplan.autocorrelation(win, nwin, wac, max_lag=brent_ixmax + 1, fft_power)
+  rplan.autocorrelation(win, nwin, wac, max_lag=brent_ixmax + 1)
   let inv_wac : FixedArray[Double] = FixedArray::make(brent_ixmax + 2, 0.0)
   inv_wac[0] = 1.0
   let wac0 = wac[0]
@@ -815,7 +814,7 @@ fn pitch_ac_core(
     all_unvoiced[fi] = unvoiced_local
     // Autocorrelation of the windowed frame, normalized like Praat:
     // r[tau] = (ra(tau)/ra(0)) / windowR(tau).
-    rplan.autocorrelation(frame, nwin, ra, max_lag=brent_ixmax + 1, fft_power)
+    rplan.autocorrelation(frame, nwin, ra, max_lag=brent_ixmax + 1)
     rx[0] = 1.0
     if ra[0] > 1.0e-300 {
       let inv_ra0 = 1.0 / ra[0]

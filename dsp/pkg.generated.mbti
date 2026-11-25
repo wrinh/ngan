@@ -18,16 +18,22 @@ pub fn kaiser_window(Int32, beta~ : Double) -> FixedArray[Double]
 
 pub fn next_pow2(Int32) -> Int32
 
-pub fn sinc_resample(FixedArray[Double], ratio~ : Double, beta? : Double, zero_crossings? : Int32) -> FixedArray[Double]
+pub fn sinc_resample(FixedArray[Double], ratio~ : Double, beta? : Double, zero_crossings? : Int32, rolloff? : Double, reflect? : Bool) -> FixedArray[Double]
+
+pub fn sinc_resample_rate(FixedArray[Double], fs_in~ : Int32, fs_out~ : Int32, beta? : Double, zero_crossings? : Int32, rolloff? : Double, reflect? : Bool) -> FixedArray[Double]
 
 // Errors
 
 // Types and methods
 pub struct FftPlan {
   n : Int32
-  rev : FixedArray[Int32]
-  cos_t : FixedArray[Double]
-  sin_t : FixedArray[Double]
+  bits : Int32
+  swap_a : FixedArray[Int32]
+  swap_b : FixedArray[Int32]
+  tw_r4 : FixedArray[Double]
+  half_plan : FftPlan?
+  cos_u : FixedArray[Double]
+  sin_u : FixedArray[Double]
 }
 pub fn FftPlan::new(Int32) -> Self
 pub fn FftPlan::transform(Self, FixedArray[Double], FixedArray[Double], inverse~ : Bool) -> Unit
@@ -41,7 +47,7 @@ pub struct RealFftPlan {
   buf_re : FixedArray[Double]
   buf_im : FixedArray[Double]
 }
-pub fn RealFftPlan::autocorrelation(Self, FixedArray[Double], Int32, FixedArray[Double], max_lag~ : Int32, FixedArray[Double]) -> Unit
+pub fn RealFftPlan::autocorrelation(Self, FixedArray[Double], Int32, FixedArray[Double], max_lag~ : Int32) -> Unit
 pub fn RealFftPlan::filter_real(Self, FixedArray[Double], Int32, FixedArray[Double], FixedArray[Double]) -> Unit
 pub fn RealFftPlan::forward_power(Self, FixedArray[Double], Int32, FixedArray[Double]) -> Unit
 pub fn RealFftPlan::inverse_real_even(Self, FixedArray[Double], FixedArray[Double], Int32) -> Unit

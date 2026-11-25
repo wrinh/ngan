@@ -72,7 +72,7 @@ test "real fft plan matches complex fft power, inverse, and autocorrelation" {
   let ac_ref : FixedArray[Double] = FixedArray::make(64, 0.0)
   let ac_fast : FixedArray[Double] = FixedArray::make(64, 0.0)
   autocorrelation_fft(cplan, x, 64, ac_ref, max_lag=63)
-  rplan.autocorrelation(x, 64, ac_fast, max_lag=63, rp)
+  rplan.autocorrelation(x, 64, ac_fast, max_lag=63)
   for tau in 0..<64 {
     assert_true(approx(ac_fast[tau], ac_ref[tau], 1.0e-9))
   }
@@ -350,4 +350,183 @@ test "burg recovers known ar poles" {
   assert_eq(upper, 2)
   assert_true(@math.abs(f1 - 500.0) < 30.0)
   assert_true(@math.abs(f2 - 1500.0) < 30.0)
+}
+
+///|
+test "next_pow2 boundaries and overflow panic" {
+  assert_eq(next_pow2(-5), 1)
+  assert_eq(next_pow2(0), 1)
+  assert_eq(next_pow2(1), 1)
+  assert_eq(next_pow2(2), 2)
+  assert_eq(next_pow2(3), 4)
+  assert_eq(next_pow2(1073741824), 1073741824)
+}
+
+///|
+test "panic next_pow2 overflows beyond 2^30" {
+  ignore(next_pow2(1073741825))
+}
+
+///|
+test "fft radix-4 and odd log2 sizes match direct dft and cardinal axes" {
+  let sizes : FixedArray[Int32] = [2, 4, 8, 16, 32, 64]
+  for s in sizes {
+    let plan = FftPlan::new(s)
+    let src_r : FixedArray[Double] = FixedArray::make(s, 0.0)
+    let src_i : FixedArray[Double] = FixedArray::make(s, 0.0)
+    let re : FixedArray[Double] = FixedArray::make(s, 0.0)
+    let im : FixedArray[Double] = FixedArray::make(s, 0.0)
+    for j in 0..<s {
+      src_r[j] = prand(j + s)
+      src_i[j] = prand(j + 100 + s)
+      re[j] = src_r[j]
+      im[j] = src_i[j]
+    }
+    plan.transform(re, im, inverse=false)
+    for k in 0..<s {
+      let mut want_r = 0.0
+      let mut want_i = 0.0
+      for t in 0..<s {
+        let a = -2.0 * @math.PI * (k * t).to_double() / s.to_double()
+        let c = @math.cos(a)
+        let sn = @math.sin(a)
+        want_r += src_r[t] * c - src_i[t] * sn
+        want_i += src_r[t] * sn + src_i[t] * c
+      }
+      assert_true(approx(re[k], want_r, 1.0e-9))
+      assert_true(approx(im[k], want_i, 1.0e-9))
+    }
+    plan.transform(re, im, inverse=true)
+    for j in 0..<s {
+      assert_true(approx(re[j], src_r[j], 1.0e-10))
+      assert_true(approx(im[j], src_i[j], 1.0e-10))
+    }
+  }
+  // Exact cardinal twiddles yield exact zero imaginary bin at Nyquist / Fs/4 for even signal.
+  let p8 = FftPlan::new(8)
+  let er : FixedArray[Double] = [1.0, 2.0, 3.0, 4.0, 5.0, 4.0, 3.0, 2.0]
+  let ei : FixedArray[Double] = FixedArray::make(8, 0.0)
+  p8.transform(er, ei, inverse=false)
+  assert_true(approx(ei[0], 0.0, 1.0e-15))
+  assert_true(approx(ei[2], 0.0, 1.0e-15))
+  assert_true(approx(ei[4], 0.0, 1.0e-15))
+  assert_true(approx(ei[6], 0.0, 1.0e-15))
+}
+
+///|
+test "real fft autocorrelation full length, unpruned vs pruned, and edge inputs" {
+  let n = 64
+  let rplan = RealFftPlan::new(n)
+  let cplan = FftPlan::new(n)
+  // Case 1: nx > n/2 (exercises unpruned path) vs direct linear autocorrelation for n=64, nx=37
+  // Note: for nx = 37 with n = 64, lags tau <= n - nx = 27 match linear AC without wrap.
+  let nx = 37
+  let x : FixedArray[Double] = FixedArray::make(nx, 0.0)
+  for i in 0..<nx {
+    x[i] = prand(i + 50)
+  }
+  let ac_unpruned : FixedArray[Double] = FixedArray::make(28, 0.0)
+  let ac_fft : FixedArray[Double] = FixedArray::make(28, 0.0)
+  rplan.autocorrelation(x, nx, ac_unpruned, max_lag=27)
+  autocorrelation_fft(cplan, x, nx, ac_fft, max_lag=27)
+  for tau in 0..<28 {
+    let mut direct = 0.0
+    for i in 0..<(nx - tau) {
+      direct += x[i] * x[i + tau]
+    }
+    assert_true(approx(ac_unpruned[tau], direct, 1.0e-9))
+    assert_true(approx(ac_fft[tau], direct, 1.0e-9))
+  }
+  // Case 2: nx <= n/2 (exercises zero-padding pruned path) including odd nx = 31.
+  let ac_pruned : FixedArray[Double] = FixedArray::make(31, 0.0)
+  rplan.autocorrelation(x, 31, ac_pruned, max_lag=30)
+  for tau in 0..<31 {
+    let mut direct = 0.0
+    for i in 0..<(31 - tau) {
+      direct += x[i] * x[i + tau]
+    }
+    assert_true(approx(ac_pruned[tau], direct, 1.0e-9))
+  }
+  // Case 3: negative/zero nx and negative max_lag do not panic.
+  let ac_edge : FixedArray[Double] = [42.0, 42.0]
+  rplan.autocorrelation(x, -3, ac_edge, max_lag=1)
+  assert_true(approx(ac_edge[0], 0.0, 1.0e-15))
+  assert_true(approx(ac_edge[1], 0.0, 1.0e-15))
+  autocorrelation_fft(cplan, x, -1, ac_edge, max_lag=-1)
+}
+
+///|
+test "cross_correlation_fft_buf handles small sizes and negative/zero lengths" {
+  for sz in ([4, 8, 16, 32] : FixedArray[Int32]) {
+    let nu = sz / 4 + 1
+    let nv = sz / 2 + 2
+    let max_lag = sz - nv
+    let u : FixedArray[Double] = FixedArray::make(nu, 0.0)
+    let v : FixedArray[Double] = FixedArray::make(nv, 0.0)
+    for i in 0..<nu {
+      u[i] = prand(i + sz)
+    }
+    for i in 0..<nv {
+      v[i] = prand(i + 300 + sz)
+    }
+    let plan = FftPlan::new(sz)
+    let re : FixedArray[Double] = FixedArray::make(sz, 0.0)
+    let im : FixedArray[Double] = FixedArray::make(sz, 0.0)
+    let cc : FixedArray[Double] = FixedArray::make(max_lag + 1, 0.0)
+    cross_correlation_fft_buf(plan, u, nu, v, nv, cc, max_lag~, re, im)
+    for tau in 0..<=max_lag {
+      let mut direct = 0.0
+      for j in 0..<nu {
+        if j + tau < nv {
+          direct += u[j] * v[j + tau]
+        }
+      }
+      assert_true(approx(cc[tau], direct, 1.0e-10))
+    }
+    // Negative nu/nv safely zero-fills cc without panicking.
+    cross_correlation_fft_buf(plan, u, -5, v, nv, cc, max_lag~, re, im)
+    for tau in 0..<=max_lag {
+      assert_true(approx(cc[tau], 0.0, 1.0e-15))
+    }
+    cross_correlation_fft_buf(plan, u, nu, v, -1, cc, max_lag~, re, im)
+    for tau in 0..<=max_lag {
+      assert_true(approx(cc[tau], 0.0, 1.0e-15))
+    }
+  }
+}
+
+///|
+test "sinc_resample_rate and reflect boundary mode preserve DC and frequency" {
+  // Constant signal with reflect=true keeps exact 1.0 across boundaries too.
+  let ones : FixedArray[Double] = FixedArray::make(200, 1.0)
+  let res_ref = sinc_resample_rate(
+    ones,
+    fs_in=44100,
+    fs_out=16000,
+    reflect=true,
+  )
+  assert_eq(res_ref.length(), 73)
+  for j in 0..<res_ref.length() {
+    assert_true(approx(res_ref[j], 1.0, 1.0e-10))
+  }
+  // Identity rate returns copy with identical samples.
+  let same = sinc_resample_rate(ones, fs_in=16000, fs_out=16000)
+  assert_eq(same.length(), 200)
+  assert_true(approx(same[0], 1.0, 1.0e-12))
+  // Downsampling high-frequency tone above new Nyquist gets attenuated cleanly.
+  let fs_in = 48000.0
+  let n_in = 1200
+  let high : FixedArray[Double] = FixedArray::make(n_in, 0.0)
+  for i in 0..<n_in {
+    high[i] = @math.sin(2.0 * @math.PI * 10000.0 * i.to_double() / fs_in)
+  }
+  let down = sinc_resample_rate(high, fs_in=48000, fs_out=16000)
+  let mut max_mid = 0.0
+  for j in 40..<(down.length() - 40) {
+    let a = @math.abs(down[j])
+    if a > max_mid {
+      max_mid = a
+    }
+  }
+  assert_true(max_mid < 1.0e-4)
 }
